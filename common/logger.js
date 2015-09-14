@@ -14,7 +14,7 @@ var logger = new winston.Logger({
     transports: [
         new winston.transports.File({
             level: 'debug',
-            filename: './src/logs/pdfhandler.log',
+            filename: './src/logs/pdfmailer.log',
             handleExceptions: true,
             json: true,
             maxsize: 54558720,
@@ -22,7 +22,7 @@ var logger = new winston.Logger({
             colorize: false 
         }),
         new winston.transports.Console({
-            level: 'verbose',
+            level: 'debug',
             handleExceptions: true,
             json: false,
             colorize: true
