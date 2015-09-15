@@ -3,13 +3,18 @@ var emailconfig = require( './common/emailconfig.js' ),
   dbCn = null,
   emailConfig = null,
   emailConfigOverrides = null,
-  cb = null;
+  cb = null,
+  report,
+  version;
 
+// Test Report and Version
+report = 'R41411';
+version = 'UKX0002';
 
 
 
 // Fetch email configuration for Report
-emailconfig.fetchMailDefaults( dbCn, 'R41411', '', processReportMailConfig );
+emailconfig.fetchMailDefaults( dbCn, report, '', processReportMailConfig );
 
 
 
@@ -27,7 +32,7 @@ function processReportMailConfig( err, mailConfig ) {
     log.info( '-------------------------------------' );
 
     // Now get version overrides
-    emailconfig.fetchMailDefaults( dbCn, 'R41411', 'UKX0002', processVersionMailConfig );
+    emailconfig.fetchMailDefaults( dbCn, report, version, processVersionMailConfig );
 
 
   }
