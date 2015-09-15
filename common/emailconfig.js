@@ -10,23 +10,24 @@
   
 
 var oracledb = require( 'oracledb' ),
+  async = require( 'async' ),
   log = require( './logger' ),
-  credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
-  emailConfig = [];
+  credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME };
+
 
 
 // Fetch default email configuration for given Jde report name.
-module.exports.fetchMailDefaults = function( dbCn, reportName, reportVersion ) {
+module.exports.fetchMailDefaults = function( dbCn, reportName, reportVersion, cb ) {
+
+  var emailConfig = [];
 
   // If valid DB connection passed then use that and continue otherwise 
   // get new connection first
-log.debug( dbCn );
-log.debug( typeof( dbCn ) );
   if ( dbCn && dbCn !== 'null' && dbCn !== 'undefined' ) {
 
     log.debug( 'Connection pased through.' );
     connection = dbCn;
-    queryJdeEmailConfig( connection, reportName, reportVersion );
+    queryJdeEmailConfig( connection, reportName, reportVersion, cb, emailConfig );
 
   } else {
 
@@ -37,15 +38,105 @@ log.debug( typeof( dbCn ) );
         return;
       }
 
-      queryJdeEmailConfig( connection, reportName, reportVersion );
+      queryJdeEmailConfig( connection, reportName, reportVersion, cb, emailConfig );
 
     });
   }
 }
 
+// Multiple email options can be defined for a Report and any of those options can be overridden at report/version level.
+// This function takes the options for the report and those for the version overrides (if any) and returns a merged set of 
+// options.
+// if same option is defined at version level as at report level then the report level option is completely 
+// replaced by the version override.
+// Otherwise the result is a combination of report and version specific options.
+module.exports.mergeMailOptions = function( reportOptions, versionOptions, cb ) {
+
+  var mailOptions = reportOptions.slice();
+
+  // Show array before
+  log.info( 'Before: ' + mailOptions )
+
+  // Iterate over Version specific overrides and remove them from report mail options first
+  async.each(
+    versionOptions,
+    async.apply( processVersionOverrides, reportOptions, versionOptions, mailOptions ),
+    function ( err ) {
+      if ( err ) {
+        log.error( 'mergMailOptions encountered error' );
+        log.error( err );
+        cb( err, [] );     
+      }    
+  
+      // okay show results for amended Report options (removed version overrides)
+     log.info( 'After: ' + mailOptions )
+
+     // Now add in the version overrides and return final result
+     mailOptions = mailOptions.concat( versionOptions );
+     cb( null, mailOptions );     
+
+    }   
+  );
+}
+
+
+// Any Email option that has been overridden (by version) should be removed from report email options
+function processVersionOverrides( reportOptions, versionOptions, mailOptions, versionOption, cb ) {
+
+  // Iterate over Report email options and remove any matching the currentversion override option Type e.g. EMAIL_TO
+  async.each(
+    reportOptions,
+    async.apply( removeOverrideOption, reportOptions, versionOptions, mailOptions, versionOption ),
+    function ( err ) {
+      if ( err ) {
+        log.error( 'processVersionOverrides encountered error' );
+        log.error( err );
+        return;
+      }
+    }   
+  );
+
+  return cb( null );
+}
+
+
+// Check current Report options array element and remove it if it matches current Version option Type
+function removeOverrideOption( reportOptions, versionOptions, mailOptions, versionOption, reportOption, cb ) {
+
+  var vType,
+    rType,
+    index = 0;
+
+  vType = versionOption[ 0 ];
+  rType = reportOption[ 0 ];
+
+
+  // If Report Email option Type matches the version override Type we are currently considering then remove it
+  if ( vType === rType ) {
+
+    log.debug( 'Match remove it: ' + vType + ' : ' + rType );
+
+    index = mailOptions.indexOf( reportOption );
+    if ( index > -1 ) { 
+
+      mailOptions.splice( index, 1 );
+
+    }
+    
+  } else { 
+
+    log.debug( 'No match leave it: ' + vType + ' : ' + rType );
+
+  }
+
+  return cb( null );
+}
+
+
+
 
 // Query the Jde Email Configuration Setup for this Report / Version.
-function queryJdeEmailConfig( connection, reportName, reportVersion ) {
+function queryJdeEmailConfig( connection, reportName, reportVersion, cb, emailConfig ) {
 
   var query;
   log.debug( 'Fetch email config for Report: ' + reportName + ' version: ' + reportVersion);
@@ -68,44 +159,41 @@ function queryJdeEmailConfig( connection, reportName, reportVersion ) {
       return;
     }
     
-    processResultsFromF559890( connection, rs.resultSet, 1 );     
+    processResultsFromF559890( connection, rs.resultSet, 1, cb, emailConfig );     
 
   });
 }
 
 
 // Process results of query on F559890 Jde Email Config Setup
-function processResultsFromF559890( connection, rsF559890, numRows ) {
-
-  var emailConfigRecord;
+function processResultsFromF559890( connection, rsF559890, numRows, cb, emailConfig ) {
 
   rsF559890.getRows( numRows, function( err, rows ) {
     if ( err ) {
       oracleResultSetClose( connection, rsF559890 );
       log.verbose( 'No email configuration found' );
 
-      // Error so return nothing much
-      return null;
+      // Error so let caller know...
+      cb( err, emailConfig );
 
     } else if ( rows.length == 0 ) {
       
       oracleResultSetClose( connection, rsF559890 );
       log.debug( 'Finished processing email configuration entries' );
 
-      // Done processing so return results
-      return emailConfig;
+      // Done processing so pass control to next function with results
+      cb( null, emailConfig );
 
     } else if ( rows.length > 0 ) {
  
       emailConfigRecord = rows[ 0 ];
-      log.debug( 'Email Config entry:' );
-      log.debug( emailConfigRecord );
+      log.debug( 'Email Record: ' + emailConfigRecord );
 
       // Process the Email Configuration record entry
-      processEmailConfigEntry(  connection, emailConfigRecord );
+      processEmailConfigEntry(  connection, emailConfigRecord, emailConfig );
 
       // Fetch next Email config entry
-      processResultsFromF559890( connection, rsF559890, 1 );     
+      processResultsFromF559890( connection, rsF559890, 1, cb, emailConfig );     
       
     }
   });
@@ -113,10 +201,9 @@ function processResultsFromF559890( connection, rsF559890, numRows ) {
 
 
 // Process each Email Configuration entry
-function processEmailConfigEntry( connection, emailConfigRecord ) {
+function processEmailConfigEntry( connection, emailConfigRecord, emailConfig ) {
 
-  emailConfig.push( [emailConfigRecord[ 3 ], emailConfigRecord[ 5 ] ] );
-  log.debug( 'Email Config List: ' + emailConfig );
+  emailConfig.push( [emailConfigRecord[ 3 ].trim(), emailConfigRecord[ 5 ].trim() ] );
 
 }
 
