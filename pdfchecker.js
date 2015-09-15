@@ -1,15 +1,15 @@
 // pdfchecker.js  : Check Jde Job Control table looking for any recently generated Pdf files that are configured 
-//                : in JDE to be eligible for logo processing and apply Dlink logo image when required.
+//                : in JDE to be eligible for Email delivery.
 // Author         : Paul Green
 // Dated          : 2015-09-03
 //
 // Synopsis
 // --------
 //
-// Called periodically by pdfhandler.js
+// Called periodically by pdfmailer.js
 // It checks the Jde Job Control Audit table looking for recently completed UBE reports.
-// When it detects reports belonging to Invoice Print (and/or any other configured reports) it will process the resulting
-// PDF file adding logo images to each page.
+// New PDF files are cross checked against JDE email configuration and and if email delivery is required then the report
+// is sent to all configured recipients
 
 
 var oracledb = require( 'oracledb' ),
@@ -47,34 +47,34 @@ function queryJdeAuditLog( dbCn, pollInterval, hostname, lastPdf, performPolledP
 
     var query;
 
-    query  = "SELECT paupmj, paupmt, pasawlatm, pafndfuf2, pablkk FROM testdta.F559859 ";
-    query += "WHERE RTRIM(PAFNDFUF2, ' ') <> 'pdfhandler' ORDER BY pasawlatm DESC";
+    query  = "SELECT paupmj, paupmt, pasawlatm, pafndfuf2, pablkk FROM testdta.F559849 ";
+    query += "WHERE RTRIM(PAFNDFUF2, ' ') <> 'pdfmailer' ORDER BY pasawlatm DESC";
 
     dbCn.execute( query, [], { resultSet: true }, function( err, rs ) {
         if ( err ) {
             log.error( err.message )
         };
 
-        processResultsFromF559859( dbCn, rs.resultSet, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess );	
+        processResultsFromF559849( dbCn, rs.resultSet, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess );	
     }); 
 }
 
 
 // Process results from JDE Audit Log table Query but only interested in last Pdf job processed
 // to determine date and time which is used to control further queries
-function processResultsFromF559859( dbCn, rsF559859, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess ) {
+function processResultsFromF559849( dbCn, rsF559849, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess ) {
 
     var record;
 
-    rsF559859.getRows( numRows, function( err, rows ) {
+    rsF559849.getRows( numRows, function( err, rows ) {
         if ( err ) { 
 
-            oracleResultsetClose( dbCn, rsF559859 );
+            oracleResultsetClose( dbCn, rsF559849 );
 
       	} else if ( rows.length == 0 ) {
 
             queryJdeJobControl( dbCn, null, begin, pollInterval, hostname, lastPdf, performPolledProcess );
-            oracleResultsetClose( dbCn, rsF559859 );
+            oracleResultsetClose( dbCn, rsF559849 );
 
 	} else if ( rows.length > 0 ) {
 		
@@ -83,14 +83,14 @@ function processResultsFromF559859( dbCn, rsF559859, numRows, begin, pollInterva
 
             record = rows[ 0 ];
             queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess );
-            oracleResultsetClose( dbCn, rsF559859 );
+            oracleResultsetClose( dbCn, rsF559849 );
 	}
     });
 }
 
 
 // Query the JDE Job Control Master file to fetch all PDF files generated since last audit entry
-// Only select PDF jobs that are registered for post PDF processing e.g. R5542565 Invoice Print
+// Only select PDF jobs that are registered for emailing
 function queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess
  ) {
 
@@ -139,7 +139,7 @@ function queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPd
     // Get todays date from System in JDE Julian format
     jdeDateToday = audit.getJdeJulianDate();
 
-    // This job normally runs every few seconds so usually we want to query job control records for today and since time 
+    // This job normally runs every 15/20 seconds so usually we want to query job control records for today and since time 
     // of last processed PDF file (adjusted by server time offset), however, if running after midnight or no PDF files generated
     // for a couple of days then we should not include time in query as it might potentially exclude some earlier PDF entries on
     // different days that we need to process.
@@ -149,7 +149,7 @@ function queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPd
         query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
         query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= ";
         query += jdeDate + ' AND jcacttime >= ' + jdeTime;
-        query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFHANDLER') ";
+        query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER') ";
         query += " ORDER BY jcactdate, jcacttime";
     	
 	log.debug( 'Last entry was today : ' + jdeDateToday + ' see: ' + jdeDate);
@@ -158,7 +158,7 @@ function queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPd
         query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
         query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= ";
         query += jdeDate;
-        query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFHANDLER') ";
+        query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER') ";
         query += " ORDER BY jcactdate, jcacttime";
     	
 	log.debug( 'Last entry was Not today : ' + jdeDateToday + ' see: ' + jdeDate);
@@ -242,10 +242,10 @@ function processLockedPdfFile(dbCn, record, hostname ) {
 
     log.verbose( 'JDE PDF ' + record[ 0 ] + " - Lock established" );
 
-    // Check this PDF file has definitely not yet been processed by any other pdfHandler instance
+    // Check this PDF file has definitely not yet been processed by any other pdfmailer instance
     // that may be running concurrently
 
-    query = "SELECT COUNT(*) FROM testdta.F559859 WHERE pafndfuf2 = '";
+    query = "SELECT COUNT(*) FROM testdta.F559849 WHERE pafndfuf2 = '";
     query += record[0] + "'";
 
     dbCn.execute( query, [], { }, function( err, result ) {
