@@ -133,3 +133,82 @@ exports.adjustTimestampByMinutes = function( timestamp, mins ) {
 
   return {'jdeDate': newdt, 'jdeTime': newtm, 'timestamp': dt, 'minutes': mins };
 }
+
+
+// This proces usually monitors JDE Report queue from the last Date and Time it handled a JDE report
+// Reference the Mailer audit log to get Date and Time of the Last emailed report
+// If Audit Log file has benn cleared or this is genuinely the first time the pdfmailer has run then 
+// use current Date and Time as the point to start monitoring from.
+// Running from the date and time of the last emailed report allows for recovery on startup should this process
+// or its host server be taken off line for a some reason - on restart it will recover and email everything it should have done!
+exports.determineLastProcessedDateTime = function( err, dbCn, cb ) {
+
+  var query = null;
+	
+  query  = "SELECT paupmj, paupmt, pasawlatm, pafndfuf2, pablkk FROM testdta.F559849 ";
+  query += "WHERE RTRIM(PAFNDFUF2, ' ') <> 'PDFMAILER' ORDER BY pasawlatm DESC";
+
+  dbCn.execute( query, [], { resultSet: true }, function( err, rs ) {
+    if ( err ) {
+      log.error( err.message )
+      return cb( err );
+    };
+
+    processResultsFromF559849( dbCn, rs.resultSet, cb );
+
+  });
+}
+
+
+
+// Process results from JDE Audit Log table Query but only interested in last Pdf job processed
+// to determine date and time which is required to begin monitoring JDE report queue
+function processResultsFromF559849( err, dbCn, rsF559849, numRows, cb) {
+
+  var auditRecord;
+
+  rsF559849.getRows( numRows, function( err, rows ) {
+    if ( err ) {
+
+      oracleResultsetClose( dbCn, rsF559849 );
+      return cb( err );
+
+    } else if ( rows.length == 0 ) {
+
+      queryJdeJobControl( dbCn, null, begin, pollInterval, hostname, lastPdf, performPolledProcess );
+      oracleResultsetClose( dbCn, rsF559849 );
+
+    } else if ( rows.length > 0 ) {
+
+      // Last audit entry retrieved
+      // Process continues by querying the JDE Job Control Master file for eligible PDF's to process
+
+      record = rows[ 0 ];
+      queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess );
+      oracleResultsetClose( dbCn, rsF559849 );
+    }
+  });
+}
+
+
+// Close Oracle database result set
+function oracleResultsetClose( dbCn, rs ) {
+
+  rs.close( function( err ) {
+    if ( err ) {
+      log.error( err );
+      oracledbCnRelease( dbCn );
+    }
+  });
+}
+
+
+// Close Oracle database Connection
+function oracledbCnRelease( dbCn ) {
+
+  dbCn.release( function ( err ) {
+    if ( err ) {
+      log.error( err );
+    }
+  });
+}
