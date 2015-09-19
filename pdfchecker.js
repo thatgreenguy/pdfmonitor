@@ -25,6 +25,24 @@ var oracledb = require( 'oracledb' ),
   begin = null;
 
 
+// Functions -
+//
+// module.exports.performJdePdfProcessing = function( dbCn, dbCredentials, pollInterval, hostname, lastPdf, performPolledProcess )
+// function queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess )
+// function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess )
+// function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, performPolledProcess )
+// function processLockedPdfFile(dbCn, record, hostname )
+// function processPDF( record, hostname )
+// function passParms(parms, cb)
+// function copyJdePdfToWorkDir( parms, cb )
+// function applyLogo( parms, cb )
+// function replaceJdePdfWithLogoVersion( parms, cb )
+// function createAuditEntry( parms, cb )
+// function removeLock( record, hostname )
+// function oracleResultsetClose( dbCn, rs )
+// function oracledbCnRelease( dbCn )
+
+
 module.exports.performJdePdfProcessing = function( dbCn, dbCredentials, pollInterval, hostname, lastPdf, performPolledProcess ) {
 
   begin = new Date();
@@ -34,64 +52,17 @@ module.exports.performJdePdfProcessing = function( dbCn, dbCredentials, pollInte
     log.warn( 'Oracle DB connection expected - Pass valid Oracle connection object' );
   }
 
-  queryJdeAuditLog( dbCn, pollInterval, hostname, lastPdf, performPolledProcess ); 
+  // queryJdeAuditLog( dbCn, pollInterval, hostname, lastPdf, performPolledProcess ); 
+  queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess );
 
 } 
 
 
 // - Functions
 //
-// Jde Audit Log records date and time of every Pdf file processed by this application.
-// Fetch the last audit entry made by this process and use the date and time as starting point for next query check  
-function queryJdeAuditLog( dbCn, pollInterval, hostname, lastPdf, performPolledProcess ) {
-
-    var query;
-
-    query  = "SELECT paupmj, paupmt, pasawlatm, pafndfuf2, pablkk FROM testdta.F559849 ";
-    query += "WHERE RTRIM(PAFNDFUF2, ' ') <> 'pdfmailer' ORDER BY pasawlatm DESC";
-
-    dbCn.execute( query, [], { resultSet: true }, function( err, rs ) {
-        if ( err ) {
-            log.error( err.message )
-        };
-
-        processResultsFromF559849( dbCn, rs.resultSet, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess );	
-    }); 
-}
-
-
-// Process results from JDE Audit Log table Query but only interested in last Pdf job processed
-// to determine date and time which is used to control further queries
-function processResultsFromF559849( dbCn, rsF559849, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess ) {
-
-    var record;
-
-    rsF559849.getRows( numRows, function( err, rows ) {
-        if ( err ) { 
-
-            oracleResultsetClose( dbCn, rsF559849 );
-
-      	} else if ( rows.length == 0 ) {
-
-            queryJdeJobControl( dbCn, null, begin, pollInterval, hostname, lastPdf, performPolledProcess );
-            oracleResultsetClose( dbCn, rsF559849 );
-
-	} else if ( rows.length > 0 ) {
-		
-            // Last audit entry retrieved
-            // Process continues by querying the JDE Job Control Master file for eligible PDF's to process
-
-            record = rows[ 0 ];
-            queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess );
-            oracleResultsetClose( dbCn, rsF559849 );
-	}
-    });
-}
-
-
 // Query the JDE Job Control Master file to fetch all PDF files generated since last audit entry
 // Only select PDF jobs that are registered for emailing
-function queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess
+function queryJdeJobControl( dbCn, date, time, begin, pollInterval, hostname, lastPdf, performPolledProcess
  ) {
 
     var auditTimestamp,
