@@ -21,7 +21,9 @@ var oracledb = require( 'oracledb' ),
   dbCredentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
   hostname = process.env.HOSTNAME,
   logLevel = process.env.LOG_LEVEL,
-  lastPdf = null;
+  lastPdf = null,
+  checkDate = null
+  checkTime = null;
 
 
 // - Initialisation
@@ -45,6 +47,7 @@ if ( typeof( hostname ) === 'undefined' || hostname === '' ) {
 
   // Get Oracle Db connection once then pass through to be re-used
   oracledb.getConnection( dbCredentials, function( err, cn ) {
+
     if ( err ) {
       log.error( 'Oracle DB connection Failure : ' + err );
       process.exit( 1 );
@@ -56,8 +59,8 @@ if ( typeof( hostname ) === 'undefined' || hostname === '' ) {
     // Log process startup in Jde Audit table 
     audit.createAuditEntry( dbCn, 'pdfmailer', 'pdfmailer.js', hostname, 'Start Jde Report Email handler' );
 
-    // When process start perform the polled processing immediately then it will repeat periodically
-    performPolledProcess();
+    // On startup determine Date and Time of last processed file or if none use current Date and TimeWhen process start perform the polled processing immediately then it will repeat periodically
+    audit.determineLastProcessedDateTime( err, dbCn, startMonitoring );   
 
   });
 }
@@ -65,13 +68,38 @@ if ( typeof( hostname ) === 'undefined' || hostname === '' ) {
 
 // - Functions
 //
+// startMonitoring()
 // performPolledProcess()
 // scheduleNextPolledProcess()
 // performPostRemoteMountChecks( err, data )
 // reconnectToJde( err )
 // performPostEstablishRemoteMounts( err, data )
-// 
-//
+
+
+// On startup determine Date and Time of last processed report and continue processing from there
+// If first time ever run or Audit Log file cleared then start from monitoring from Now
+function startMonitoring( err, data ) {
+
+  if ( err ) {
+
+    log.error( 'PDFMAILER Startup failed : ' + err );
+    process.exit( 1 );
+
+  } else {
+
+    checkDate = data.lastAuditEntryDate;
+    checkTime = data.lastAuditEntryTime;
+    lastPdf = data.lastAuditEntryJob;
+
+    log.info( 'Monitoring to start from : ' + checkDate + ' ' + checkTime + ' then every : ' + pollInterval + ' milliseconds' ); 
+
+    // Startup has check Date and Time so can now perform any mail operations then monitor periodically
+    performPolledProcess();
+
+  }
+}
+
+
 // Initiates polled process that is responsible for emailing Jde report files
 function performPolledProcess() {
 

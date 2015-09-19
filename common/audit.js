@@ -10,7 +10,35 @@
 var oracledb = require( 'oracledb' ),
   log = require( './logger' ),
   moment = require( 'moment' ),
-  credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME };
+  credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
+  aixTimeOffset = process.env.AIX_TIME_OFFSET;
+
+
+// Initialisation
+//
+// AIX Time offset required because all servers synchronised except AIX which is currently adrift by approx 3.5 minutes
+// So date and Time related database queries could miss jobs created on AIX unless we offset the time
+if ( typeof( aixTimeOffset ) === 'undefined' ) {
+
+  log.debug( 'AIX Server Time Offset will be : ' + aixTimeOffset + ' for this run.' );
+  aixTimeOffset = 5;
+
+}
+
+exports.aixTimeOffset = aixTimeOffset;
+
+
+// Functions - 
+//
+// exports createAuditEntry function( odbCn, pdfjob, genkey, ctrid, status, dbCn )
+// exports createTimestamp function( dt, dateSep, timeSep, padChar ) 
+// exports getJdeJulianDate function( dt ) 
+// exports getJdeAuditTime function( dt, padChar ) 
+// exports adjustTimestampByMinutes function( timestamp, mins ) 
+// exports determineLastProcessedDateTime function( err, dbCn, cb ) 
+// processResultsFromF559849( dbCn, rsF559849, numRows, cb) 
+// oracleResultSetClose( dbCn, rs ) 
+// oracledbCnRelease( dbCn ) 
 
 
 // Insert new Audit entry into the JDE audit log file.
@@ -138,15 +166,17 @@ exports.determineLastProcessedDateTime = function( err, dbCn, cb ) {
   var query = null;
 	
   query  = "SELECT paupmj, paupmt, pasawlatm, pafndfuf2, pablkk FROM testdta.F559849 ";
-  query += "WHERE RTRIM(PAFNDFUF2, ' ') <> 'PDFMAILER' ORDER BY pasawlatm DESC";
+  query += "WHERE RTRIM(PAFNDFUF2, ' ') <> 'pdfmailer' ORDER BY pasawlatm DESC";
 
-  dbCn.execute( query, [], { resultSet: true }, function( err, rs ) {
+  dbCn.execute( query, [], { resultSet: true }, 
+  function( err, rs ) {
+
     if ( err ) {
       log.error( err.message )
-      return cb( err );
+      return cb( err, null );
     };
 
-    processResultsFromF559849( dbCn, rs.resultSet, cb );
+    processResultsFromF559849( dbCn, rs.resultSet, 1, cb );
 
   });
 }
@@ -155,29 +185,46 @@ exports.determineLastProcessedDateTime = function( err, dbCn, cb ) {
 
 // Process results from JDE Audit Log table Query but only interested in last Pdf job processed
 // to determine date and time which is required to begin monitoring JDE report queue
-function processResultsFromF559849( err, dbCn, rsF559849, numRows, cb) {
+function processResultsFromF559849( dbCn, rsF559849, numRows, cb) {
 
-  var auditRecord;
+  var auditRecord,
+    tokens,
+    data = {};
 
   rsF559849.getRows( numRows, function( err, rows ) {
     if ( err ) {
 
-      oracleResultsetClose( dbCn, rsF559849 );
-      return cb( err );
+      oracleResultSetClose( dbCn, rsF559849 );
+      cb( err, null );
 
     } else if ( rows.length == 0 ) {
 
-      queryJdeJobControl( dbCn, null, begin, pollInterval, hostname, lastPdf, performPolledProcess );
-      oracleResultsetClose( dbCn, rsF559849 );
+      log.verbose( 'Last Audit Entry: Not found use current Date and Time' );
+      oracleResultSetClose( dbCn, rsF559849 );
+
+      data[ 'lastAuditEntryDate' ] = exports.getJdeJulianDate();
+      data[ 'lastAuditEntryTime' ] = exports.getJdeAuditTime();
+      data[ 'lastAuditEntryJob' ] = 'None';
+
+      cb( null, data );
 
     } else if ( rows.length > 0 ) {
 
       // Last audit entry retrieved
-      // Process continues by querying the JDE Job Control Master file for eligible PDF's to process
+      // Determine Date and Time to start monitoring from then pass control onwards
+      log.verbose( 'Last Audit Entry: ' + rows[ 0 ] );
+      oracleResultSetClose( dbCn, rsF559849 );
 
-      record = rows[ 0 ];
-      queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess );
-      oracleResultsetClose( dbCn, rsF559849 );
+      jdedatetime = rows[ 0 ][ 4 ];
+      tokens = jdedatetime.split(' ');
+
+      data[ 'lastAuditEntryDate' ] = tokens[ 0 ];
+      data[ 'lastAuditEntryTime' ] = tokens[ 1 ];
+      data[ 'lastAuditEntryJob' ] = rows[ 0 ][ 3 ];
+
+      cb( null, { 'lastAuditEntryDate': tokens[ 0 ], 
+                  'lastAuditEntryTime': tokens[ 1 ],
+                  'lastAuditEntryJob': rows[ 0 ][ 3 ]} );
     }
   });
 }
@@ -204,3 +251,5 @@ function oracledbCnRelease( dbCn ) {
     }
   });
 }
+
+
