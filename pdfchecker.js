@@ -195,7 +195,8 @@ function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterva
       log.verbose( 'End Check: ' + finish  + ' took: ' + ( finish - begin ) + ' milliseconds, Last Pdf: ' + lastPdf );
  
       // No more Job control records to process in this run - this run is done - so schedule next run
-      setTimeout( performPolledProcess, pollInterval );
+      //setTimeout( performPolledProcess, pollInterval );
+      performPolledProcess();
 
     } else if ( rows.length > 0 ) {
 

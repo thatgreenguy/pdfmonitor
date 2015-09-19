@@ -16,7 +16,7 @@ var oracledb = require( 'oracledb' ),
   mounts = require( './common/mounts.js' ),
   audit = require( './common/audit.js' ),
   pdfChecker = require( './pdfchecker.js' ),
-  pollInterval = 5000,
+  pollInterval =  3000,
   dbCn = null,
   dbCredentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
   hostname = process.env.HOSTNAME,
@@ -54,7 +54,7 @@ if ( typeof( hostname ) === 'undefined' || hostname === '' ) {
     dbCn = cn;
 
     // Log process startup in Jde Audit table 
-    audit.createAuditEntry( 'pdfmailer', 'pdfmailer.js', hostname, 'Start Jde Pdf Report Email handler' );
+    audit.createAuditEntry( dbCn, 'pdfmailer', 'pdfmailer.js', hostname, 'Start Jde Report Email handler' );
 
     // When process start perform the polled processing immediately then it will repeat periodically
     performPolledProcess();
@@ -64,6 +64,13 @@ if ( typeof( hostname ) === 'undefined' || hostname === '' ) {
 
 
 // - Functions
+//
+// performPolledProcess()
+// scheduleNextPolledProcess()
+// performPostRemoteMountChecks( err, data )
+// reconnectToJde( err )
+// performPostEstablishRemoteMounts( err, data )
+// 
 //
 // Initiates polled process that is responsible for emailing Jde report files
 function performPolledProcess() {
@@ -76,7 +83,7 @@ function performPolledProcess() {
 // Handles scheduling of the next run of the frequently polled process 
 function scheduleNextPolledProcess() {
 
-  log.debug( 'Schedule the next Polled process in : ' + polledInterval + ' milliseconds' );
+  log.debug( 'Schedule the next Polled process in : ' + pollInterval + ' milliseconds' );
   setTimeout( performPolledProcess, pollInterval );
 
 }
@@ -118,8 +125,7 @@ function performPostEstablishRemoteMounts( err, data ) {
     // Unable to reconnect to Jde at the moment so pause and retry shortly
     log.warn( '' );
     log.warn( 'Unable to re-establish remote mounts to Jde will pause and retry' );
-    log.warn( '' );
-    setTimeout( performPolledProcess, pollInterval );
+    scheduleNextPolledProcess();
 
   } else {
 

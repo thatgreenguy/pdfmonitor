@@ -8,13 +8,13 @@
   
 
 var oracledb = require( 'oracledb' ),
-  logger = require( './logger' ),
+  log = require( './logger' ),
   moment = require( 'moment' ),
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME };
 
 
 // Insert new Audit entry into the JDE audit log file.
-exports.createAuditEntry = function( pdfjob, genkey, ctrid, status ) {
+exports.createAuditEntry = function( odbCn, pdfjob, genkey, ctrid, status, dbCn ) {
 
   var dt,
   timestamp,
@@ -32,26 +32,18 @@ exports.createAuditEntry = function( pdfjob, genkey, ctrid, status ) {
   if ( typeof( ctrid ) === 'undefined' ) ctrid = ' ';
   if ( typeof( status ) === 'undefined' ) status = ' ';
 
-  oracledb.getConnection( credentials, function(err, connection) {
-    if ( err ) { 
-      logger.error( 'Oracle DB Connection Failure' );
-      return;
-    }
+  query = "INSERT INTO testdta.F559849 VALUES (:pasawlatm, :pafndfuf2, :pablkk, :paactivid, :padeltastat, :papid, :pajobn, :pauser, :paupmj, :paupmt)";
+  log.debug( query );
 
-    query = "INSERT INTO testdta.F559859 VALUES (:pasawlatm, :pafndfuf2, :pablkk, :paactivid, :padeltastat, :papid, :pajobn, :pauser, :paupmj, :paupmt)";
- 
-    connection.execute( query, [timestamp, pdfjob, genkey, ctrid, status, 'PDFHANDLER', 'CENTOS', 'DOCKER', jdedate, jdetime ], { autoCommit: true }, function( err, result ) {
+  odbCn.execute( query, 
+    [timestamp, pdfjob, genkey, ctrid, status, 'PDFMAILER', 'CENTOS', 'DOCKER', jdedate, jdetime ],
+    { autoCommit: true }, 
+    function( err, rs ) {
+
       if ( err ) {
-        logger.error( err.message );
+        log.error( err.message );
         return;
       }
-      connection.release( function( err ) {
-        if ( err ) {
-          logger.error( err.message );
-          return;
-        }
-      });
-    });
   });
 }
 
@@ -192,7 +184,7 @@ function processResultsFromF559849( err, dbCn, rsF559849, numRows, cb) {
 
 
 // Close Oracle database result set
-function oracleResultsetClose( dbCn, rs ) {
+function oracleResultSetClose( dbCn, rs ) {
 
   rs.close( function( err ) {
     if ( err ) {
