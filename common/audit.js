@@ -20,7 +20,7 @@ var oracledb = require( 'oracledb' ),
 // So date and Time related database queries could miss jobs created on AIX unless we offset the time
 if ( typeof( aixTimeOffset ) === 'undefined' ) {
 
-  aixTimeOffset = -115;
+  aixTimeOffset = -215;
   log.debug( 'AIX Server Time Offset will be : ' + aixTimeOffset + ' for this run.' );
 
 }

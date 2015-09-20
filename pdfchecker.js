@@ -16,11 +16,11 @@ var oracledb = require( 'oracledb' ),
   lock = require( './common/lock.js' ),
   log = require( './common/logger.js' ),
   audit = require( './common/audit.js' ),
+  mail = require( './common/mail.js' ),
   async = require( 'async' ),
   exec = require( 'child_process' ).exec,
   dirRemoteJdePdf = process.env.DIR_JDEPDF,
   dirLocalJdePdf = process.env.DIR_SHAREDDATA,
-  serverTimeOffset = 5,
   numRows = 1,
   begin = null;
 
@@ -217,9 +217,7 @@ function processPDF( dbCn, record, hostname ) {
 
     async.series([
         function ( cb ) { passParms( parms, cb ) }, 
-//        function ( cb ) { copyJdePdfToWorkDir( parms, cb ) }, 
-//        function ( cb ) { applyLogo( parms, cb ) }, 
-//        function ( cb ) { replaceJdePdfWithLogoVersion( parms, cb ) },
+        function ( cb ) { emailReport( parms, cb ) }, 
         function ( cb ) { createAuditEntry( parms, cb ) }
         ], function(err, results) {
 
@@ -245,6 +243,16 @@ function processPDF( dbCn, record, hostname ) {
 function passParms(parms, cb) {
 
   cb( null, parms);  
+
+}
+
+
+function emailReport( parms, cb ) {
+
+  // Email report
+  log.verbose( "JDE PDF " + parms.jcfndfuf2 + " - Mailing JDE Report" );
+
+  mail.prepMail( parms.dbCn, parms.jcfndfuf2, cb );    
 
 }
 

@@ -30,32 +30,109 @@ var oracledb = require( 'oracledb' ),
 
 
 // Fetch default email configuration for given Jde report name.
-module.exports.fetchMailDefaults = function( dbCn, jdeJob, reportName, reportVersion, cb ) {
+module.exports.fetchMailDefaults = function( dbCn, jdeJob, postMailCb, useVersion, getVersionOptions ) {
 
-  var emailConfig = [];
+  var options = [],
+    reportName,
+    versionName,
+    tokens;
 
-  // If valid DB connection passed then use that and continue otherwise 
-  // get new connection first
-  if ( dbCn && dbCn !== 'null' && dbCn !== 'undefined' ) {
+  // Extract Report name and Version name
+  tokens = jdeJob.split('_');
+  reportName = tokens[ 0 ];
 
-    log.debug( 'Connection pased through.' );
-    connection = dbCn;
-    queryJdeEmailConfig( connection, jdeJob, reportName, reportVersion, cb, emailConfig );
+  // For default Report options version name is '*ALL' - otherwise pass actual version name
+  if ( useVersion ) {
+
+    versionName = tokens[ 1 ];
 
   } else {
 
-    log.debug( 'Establish connection first.' );
-    oracledb.getConnection( credentials, function(err, connection) {
-      if ( err ) { 
-        log.error( 'Oracle DB Connection Failure' );
-        return;
-      }
+    versionName = '*ALL';
 
-      queryJdeEmailConfig( connection, jdeJob, reportName, reportVersion, cb, emailConfig );
-
-    });
   }
+
+  queryJdeEmailConfig( dbCn, jdeJob, postMailCb, reportName, versionName, options, getVersionOptions );
+
 }
+
+
+// Query the Jde Email Configuration Setup for this Report / Version.
+function queryJdeEmailConfig( dbCn, jdeJob, postMailCb, reportName, versionName, options, getVersionOptions ) {
+
+  var query;
+
+  log.debug( 'Fetch email config for Report: ' + reportName + ' version: ' + versionName );
+
+  query = "SELECT * FROM testdta.F559890 WHERE CRPGM = '" + reportName;
+  query += "' AND CRVERNM = '" + versionName + "'";
+  query += " AND CRCFGSID = 'PDFMAILER'";
+  log.debug( query ); 
+
+  dbCn.execute( query, [], { resultSet: true }, 
+  function( err, rs ) {
+  
+    if ( err ) {
+    
+      log.error( 'Query Failed : queryJdeEmailConfig Failed' );
+      log.error( err.message );
+      return;
+
+    }
+    
+    processResultsFromF559890( dbCn, jdeJob, postMailCb, versionName, rs.resultSet, 1, options, getVersionOptions );     
+
+  });
+}
+
+
+// Process results of query on F559890 Jde Email Config Setup
+function processResultsFromF559890( dbCn, jdeJob, postMailCb, versionName, rsF559890, numRows, options, getVersionOptions ) {
+
+log.warn( 'processResultsFromF559890: Function: ' + cb );
+
+  rsF559890.getRows( numRows, function( err, rows ) {
+    if ( err ) {
+
+      oracleResultSetClose( dbCn, rsF559890 );
+      log.verbose( 'No email configuration found' );
+      
+    } else if ( rows.length == 0 ) {
+      
+      oracleResultSetClose( dbCn, rsF559890 );
+      log.debug( 'Finished processing email configuration entries' );
+
+      // Done processing so pass control to next function with results
+      getVersionOptions( dbCn, jdeJob, postMailCb, options );
+      
+    } else if ( rows.length > 0 ) {
+ 
+      log.debug( 'Email Record: ' + rows[ 0 ] );
+
+      // Process the Email Configuration record entry
+      processEmailConfigEntry(  dbCn, jdeJob, postMailCb, rsF559890, rows[ 0 ], versionName, options, cb );
+
+    }
+  });
+}
+
+
+// Process each Email Configuration entry
+function processEmailConfigEntry( dbCn, jdeJob, postMailCb, rsF559890, record, versionName, options, cb ) {
+
+log.warn( 'procssEmalConfigEntry: Function: ' + cb );
+
+  if ( versionName === '*ALL' ) {
+    options.push([ 0 ] [ record[ 3 ].trim(), record[ 5 ].trim() ]);
+  } else {
+    options.push([ 1 ] [ record[ 3 ].trim(), record[ 5 ].trim() ]);
+  }
+
+  // Fetch next Email config entry
+  processResultsFromF559890( dbCn, jdeJob, postMailCb, versionName, rsF559890, 1, options, cb );     
+    
+}
+
 
 // Multiple email options can be defined for a Report and any of those options can be overridden at report/version level.
 // This function takes the options for the report and those for the version overrides (if any) and returns a merged set of 
@@ -63,7 +140,7 @@ module.exports.fetchMailDefaults = function( dbCn, jdeJob, reportName, reportVer
 // if same option is defined at version level as at report level then the report level option is completely 
 // replaced by the version override.
 // Otherwise the result is a combination of report and version specific options.
-module.exports.mergeMailOptions = function( reportOptions, versionOptions, cb ) {
+module.exports.mergeMailOptions = function( reportOptions, versionOptions, postMailCb, cb ) {
 
   var mailOptions = reportOptions.slice();
 
@@ -78,7 +155,7 @@ module.exports.mergeMailOptions = function( reportOptions, versionOptions, cb ) 
       if ( err ) {
         log.error( 'mergMailOptions encountered error' );
         log.error( err );
-        cb( err, [] );     
+        cb( err );     
       }    
   
       // okay show results for amended Report options (removed version overrides)
@@ -144,82 +221,6 @@ function removeOverrideOption( reportOptions, versionOptions, mailOptions, versi
 
   return cb( null );
 }
-
-
-
-
-// Query the Jde Email Configuration Setup for this Report / Version.
-function queryJdeEmailConfig( connection, jdeJob, reportName, reportVersion, cb, emailConfig ) {
-
-  var query;
-  log.debug( 'Fetch email config for Report: ' + reportName + ' version: ' + reportVersion);
-  if ( ! reportVersion ) {
-
-    log.debug( 'Report Version not passed / defined so defaulting to "*ALL" ' );
-    reportVersion = '*ALL';
-
-  }
-
-  query = "SELECT * FROM testdta.F559890 WHERE CRPGM = '" + reportName;
-  query += "' AND CRVERNM = '" + reportVersion + "'";
-  query += " AND CRCFGSID = 'PDFMAILER'";
-  log.debug( query ); 
-
-  connection.execute( query, [], { resultSet: true }, function( err, rs ) {
-    if ( err ) {
-      log.error( 'queryJdeEmailConfig Failed' );
-      log.error( err.message );
-      return;
-    }
-    
-    processResultsFromF559890( connection, jdeJob, rs.resultSet, 1, cb, emailConfig );     
-
-  });
-}
-
-
-// Process results of query on F559890 Jde Email Config Setup
-function processResultsFromF559890( connection, jdeJob, rsF559890, numRows, cb, emailConfig ) {
-
-  rsF559890.getRows( numRows, function( err, rows ) {
-    if ( err ) {
-      oracleResultSetClose( connection, rsF559890 );
-      log.verbose( 'No email configuration found' );
-
-      // Error so let caller know...
-      cb( err, emailConfig, jdeJob );
-
-    } else if ( rows.length == 0 ) {
-      
-      oracleResultSetClose( connection, rsF559890 );
-      log.debug( 'Finished processing email configuration entries' );
-
-      // Done processing so pass control to next function with results
-      cb( null, emailConfig, jdeJob );
-
-    } else if ( rows.length > 0 ) {
- 
-      emailConfigRecord = rows[ 0 ];
-      log.debug( 'Email Record: ' + emailConfigRecord );
-
-      // Process the Email Configuration record entry
-      processEmailConfigEntry(  connection, emailConfigRecord, emailConfig );
-
-      // Fetch next Email config entry
-      processResultsFromF559890( connection, jdeJob, rsF559890, 1, cb, emailConfig );     
-      
-    }
-  });
-}
-
-
-// Process each Email Configuration entry
-function processEmailConfigEntry( connection, emailConfigRecord, emailConfig ) {
-
-  emailConfig.push( [emailConfigRecord[ 3 ].trim(), emailConfigRecord[ 5 ].trim() ] );
-
-}
-
 
 
 // Close Oracle Database result set
