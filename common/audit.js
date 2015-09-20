@@ -20,8 +20,8 @@ var oracledb = require( 'oracledb' ),
 // So date and Time related database queries could miss jobs created on AIX unless we offset the time
 if ( typeof( aixTimeOffset ) === 'undefined' ) {
 
-  log.debug( 'AIX Server Time Offset will be : ' + aixTimeOffset + ' for this run.' );
   aixTimeOffset = 5;
+  log.debug( 'AIX Server Time Offset will be : ' + aixTimeOffset + ' for this run.' );
 
 }
 
@@ -189,7 +189,9 @@ function processResultsFromF559849( dbCn, rsF559849, numRows, cb) {
 
   var auditRecord,
     tokens,
-    data = {};
+    data = {},
+    ts = null;
+    ats = null;
 
   rsF559849.getRows( numRows, function( err, rows ) {
     if ( err ) {
@@ -202,8 +204,12 @@ function processResultsFromF559849( dbCn, rsF559849, numRows, cb) {
       log.verbose( 'Last Audit Entry: Not found use current Date and Time' );
       oracleResultSetClose( dbCn, rsF559849 );
 
-      data[ 'lastAuditEntryDate' ] = exports.getJdeJulianDate();
-      data[ 'lastAuditEntryTime' ] = exports.getJdeAuditTime();
+      // Get current Date and Time adjusted by Aix Server Time Offset
+      ts = exports.createTimestamp();      
+      ats = exports.adjustTimestampByMinutes( ts );  
+
+      data[ 'lastAuditEntryDate' ] = ats.jdeDate;
+      data[ 'lastAuditEntryTime' ] = ats.jdeTime;
       data[ 'lastAuditEntryJob' ] = 'None';
 
       cb( null, data );

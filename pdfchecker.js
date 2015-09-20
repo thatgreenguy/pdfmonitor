@@ -27,112 +27,64 @@ var oracledb = require( 'oracledb' ),
 
 // Functions -
 //
-// module.exports.performJdePdfProcessing = function( dbCn, dbCredentials, pollInterval, hostname, lastPdf, performPolledProcess )
-// function queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess )
+// module.exports.queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess )
 // function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess )
 // function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, performPolledProcess )
 // function processLockedPdfFile(dbCn, record, hostname )
 // function processPDF( record, hostname )
 // function passParms(parms, cb)
-// function copyJdePdfToWorkDir( parms, cb )
-// function applyLogo( parms, cb )
-// function replaceJdePdfWithLogoVersion( parms, cb )
 // function createAuditEntry( parms, cb )
 // function removeLock( record, hostname )
 // function oracleResultsetClose( dbCn, rs )
 // function oracledbCnRelease( dbCn )
 
 
-module.exports.performJdePdfProcessing = function( dbCn, dbCredentials, pollInterval, hostname, lastPdf, performPolledProcess ) {
+// Query the JDE Job Control Master file to fetch all PDF files generated since last audit entry
+// Only select PDF jobs that are registered for emailing
+module.exports.queryJdeJobControl = function( dbCn, chkDate, chkTime, pollInterval, hostname, lastPdf, performPolledProcess ) {
+
+  var auditTimestamp,
+  query,
+  result,
+  jdeDate,
+  jdeTime,
+  jdeDateToday,
+  wkAdt;
 
   begin = new Date();
   log.debug( 'Begin Checking : ' + begin + ' - Looking for new Jde Pdf files since last run' );
 
-  if ( dbCn === null ) {
-    log.warn( 'Oracle DB connection expected - Pass valid Oracle connection object' );
-  }
+  // Checking of JDE Database Job Control is driven by passed Date and Time.
+  // On startup where process has not run for a while this date and time could be from several days ago.
+  // On subsequent calls (here) this date and time should be from a few seconds ago
+  // i.e. first time could be looking for jobs going back several days that require processing but once
+  // running it should be looking back and checking for the polling interval only
 
-  // queryJdeAuditLog( dbCn, pollInterval, hostname, lastPdf, performPolledProcess ); 
-  queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess );
+  // Get todays date from System in JDE Julian format
+  jdeDateToday = audit.getJdeJulianDate();
 
-} 
+  // If Passed check from Date is not today or we have just crossed midnight threshold the query should not use time 
+  // as part of selection.
 
-
-// - Functions
-//
-// Query the JDE Job Control Master file to fetch all PDF files generated since last audit entry
-// Only select PDF jobs that are registered for emailing
-function queryJdeJobControl( dbCn, date, time, begin, pollInterval, hostname, lastPdf, performPolledProcess
- ) {
-
-    var auditTimestamp,
-        query,
-        result,
-        jdeDate,
-        jdeTime,
-        jdeDateToday,
-        wkAdt;
-
-    // Normally query JDE job control file from last Pdf file processed by this process, however, firt time and if
-    // JDE Audit Log file is cleared there will be no entry so use current System Date and Time instead
-    if ( record === null ) {
-
-      // Issue with server clocks JDE and Linux being slightly out - approx 2.5 minutes.
-      // This will be rectified but in case it happens again or times drift slightly in future 
-      // Adjust query search date and time backwards by Offset - say 5 minutes - to allow for slightly different clock times
-      // and to ensure a PDF completing on JDE when this query runs is not missed
-
-      auditTimestamp = audit.createTimestamp();
-      result = audit.adjustTimestampByMinutes( auditTimestamp, - serverTimeOffset );
-      jdeDate = result.jdeDate;
-      jdeTime = result.jdeTime;
-
-      log.debug( 'No Audit record found so query using Date and Time from system: ' + jdeDate + ' ' + jdeTime );
-
-    } else {
-
-      // Set the Last PDF processed by this application (from the JDE Audit table) and use its Date and Time for Query
-      lastPdf = record[ 3 ];
-      log.debug( 'Last Audited PDF was : ' + record );
-      //auditTimestamp = record[ 2 ];
-      //result = audit.adjustTimestampByMinutes( auditTimestamp );
-      
-      // The actual end date and time (from the JDE Job Control File) of the last job picked up in the Audit control table
-      // is stored in BLKK so exatrct from there
-      wkAdt = record[ 4 ].split(' ');  
-      jdeDate = wkAdt[ 0 ]; 
-      jdeTime = wkAdt[ 1 ]; 
-
-      log.debug( 'Audit record found so query using Date and Time from that: ' + jdeDate + ' ' + jdeTime );
-
-    }
- 
-    // Get todays date from System in JDE Julian format
-    jdeDateToday = audit.getJdeJulianDate();
-
-    // This job normally runs every 15/20 seconds so usually we want to query job control records for today and since time 
-    // of last processed PDF file (adjusted by server time offset), however, if running after midnight or no PDF files generated
-    // for a couple of days then we should not include time in query as it might potentially exclude some earlier PDF entries on
-    // different days that we need to process.
-
-    if ( jdeDateToday == jdeDate & record !== null ) {
+  if ( jdeDateToday == chkDate ) {
        
         query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
         query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= ";
-        query += jdeDate + ' AND jcacttime >= ' + jdeTime;
+        query += chkDate + ' AND jcacttime >= ' + chkTime;
         query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER') ";
         query += " ORDER BY jcactdate, jcacttime";
     	
-	log.debug( 'Last entry was today : ' + jdeDateToday + ' see: ' + jdeDate);
+	log.debug( 'Check Date matches Todays Date : ' + jdeDateToday + ' see: ' + chkDate);
+
     } else { 
        
         query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
         query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= ";
-        query += jdeDate;
+        query += chkDate;
         query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER') ";
         query += " ORDER BY jcactdate, jcacttime";
     	
-	log.debug( 'Last entry was Not today : ' + jdeDateToday + ' see: ' + jdeDate);
+	log.debug( 'Check Date is not today : ' + jdeDateToday + ' see: ' + chkDate);
     }
 
     log.debug(query);
@@ -143,13 +95,13 @@ function queryJdeJobControl( dbCn, date, time, begin, pollInterval, hostname, la
           return;
         }
 
-        processResultsFromF556110( dbCn, rs.resultSet, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess );
+        processResultsFromF556110( dbCn, rs.resultSet, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess );
     }); 
 }
 
 
 // Process results of query on JDE Job Control file 
-function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess ) {
+function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess ) {
 
   var jobControlRecord,
   finish;
@@ -166,7 +118,6 @@ function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterva
       log.verbose( 'End Check: ' + finish  + ' took: ' + ( finish - begin ) + ' milliseconds, Last Pdf: ' + lastPdf );
  
       // No more Job control records to process in this run - this run is done - so schedule next run
-      //setTimeout( performPolledProcess, pollInterval );
       performPolledProcess();
 
     } else if ( rows.length > 0 ) {
@@ -262,9 +213,9 @@ function processPDF( record, hostname ) {
 
     async.series([
         function ( cb ) { passParms( parms, cb ) }, 
-        function ( cb ) { copyJdePdfToWorkDir( parms, cb ) }, 
-        function ( cb ) { applyLogo( parms, cb ) }, 
-        function ( cb ) { replaceJdePdfWithLogoVersion( parms, cb ) },
+//        function ( cb ) { copyJdePdfToWorkDir( parms, cb ) }, 
+//        function ( cb ) { applyLogo( parms, cb ) }, 
+//        function ( cb ) { replaceJdePdfWithLogoVersion( parms, cb ) },
         function ( cb ) { createAuditEntry( parms, cb ) }
         ], function(err, results) {
 
@@ -277,7 +228,7 @@ function processPDF( record, hostname ) {
              if ( err ) {
                log.error("JDE PDF " + prms.jcfndfuf2 + " - Processing failed - check logs in ./logs");
 	     } else {
-               log.info("JDE PDF " + prms.jcfndfuf2 + " - Logo Processing Complete");
+               log.info("JDE PDF " + prms.jcfndfuf2 + " - Mail Processing Complete");
              }
            }
     );
@@ -291,66 +242,6 @@ function passParms(parms, cb) {
 
   cb( null, parms);  
 
-}
-
-
-// Make a backup copy of the original JDE PDF file - just in case we need the untouched original
-// These can be purged inline with the normal JDE PrintQueue - currently PDF's older than approx 2 months
-function copyJdePdfToWorkDir( parms, cb ) {
-
-  var cmd = "cp /home/pdfdata/" + parms.jcfndfuf2 + " /home/shareddata/wrkdir/" + parms.jcfndfuf2.trim() + "_ORIGINAL";
-
-  log.verbose( "JDE PDF " + parms.jcfndfuf2 + " - Make backup copy of original JDE PDF file in work directory" );
-  log.debug( cmd );
-  exec( cmd, function( err, stdout, stderr ) {
-    if ( err !== null ) {
-      log.debug( cmd + ' ERROR: ' + err );
-      cb( err, cmd + " - Failed" );
-    } else {
-      cb( null, cmd + " - Done" );
-    }
-  });
-}
-
-
-// Read original PDF and create new replacement version in working directory with logos added
-function applyLogo( parms, cb ) {
-
-  var pdfInput = "/home/shareddata/wrkdir/" + parms.jcfndfuf2.trim() + "_ORIGINAL",
-    pdfOutput = '/home/shareddata/wrkdir/' + parms.jcfndfuf2,
-    cmd = "node ./src/pdfaddlogo.js " + pdfInput + " " + pdfOutput ;
-
-  log.verbose( "JDE PDF " + parms.jcfndfuf2 + " - Read original creating new PDF in work Directory with logos" );
-  log.debug( cmd );
-  exec( cmd, function( err, stdout, stderr ) {
-    if ( err !== null ) {
-      log.debug( cmd + ' ERROR: ' + err );
-      log.info( 'Errors when applying Logo: Check but likely due to Logo already applied in prior run: ');
-      cb( err, cmd + " - Failed" );
-    } else {
-      cb( null, cmd + " - Done" );
-    }
-  });
-}
-
-
-// Replace original JDE PDF File in PrintQueue with amended PDF incuding logos
-function replaceJdePdfWithLogoVersion( parms, cb ) {
-
-  var pdfWithLogos = "/home/shareddata/wrkdir/" + parms.jcfndfuf2,
-    jdePrintQueue = "/home/pdfdata/" + parms.jcfndfuf2,
-    cmd = "mv " + pdfWithLogos + " " + jdePrintQueue;
-
-  log.verbose( "JDE PDF " + parms.jcfndfuf2 + " - Replace JDE output queue PDF with modified Logo version" );
-  log.debug( cmd );
-  exec( cmd, function( err, stdout, stderr ) {
-    if ( err !== null ) {
-      log.debug( cmd + ' ERROR: ' + err );
-      cb( err, cmd + " - Failed" );
-    } else {
-      cb( null, cmd + " - Done" );
-    }
-  });
 }
 
 
