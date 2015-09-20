@@ -146,7 +146,7 @@ function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval
 
     // Process second and subsequent records.
     cb = function() { processLockedPdfFile( dbCn, jobControlRecord, hostname ); }
-    lock.gainExclusivity( jobControlRecord, hostname, dbCn, cb );		
+    lock.gainExclusivity( dbCn, jobControlRecord, hostname, cb );		
   }
 
   // Process subsequent PDF entries if any - Read next Job Control record
@@ -156,7 +156,7 @@ function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval
 
 
 // Called when exclusive lock has been successfully placed to process the PDF file
-function processLockedPdfFile(dbCn, record, hostname ) {
+function processLockedPdfFile( dbCn, record, hostname ) {
 
     var query,
         countRec,
