@@ -15,9 +15,22 @@ var oracledb = require( 'oracledb' ),
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME };
 
 
+// Functions  -
+//
+// module.exports.fetchMailDefaults = function( dbCn, reportName, reportVersion, cb )
+// module.exports.mergeMailOptions = function( reportOptions, versionOptions, cb )
+// function processVersionOverrides( reportOptions, versionOptions, mailOptions, versionOption, cb )
+// function removeOverrideOption( reportOptions, versionOptions, mailOptions, versionOption, reportOption, cb )
+// function queryJdeEmailConfig( connection, reportName, reportVersion, cb, emailConfig )
+// function processResultsFromF559890( connection, rsF559890, numRows, cb, emailConfig )
+// function processEmailConfigEntry( connection, emailConfigRecord, emailConfig )
+// function oracleResultSetClose( connection, rs )
+// function oracleResultSetClose( connection )
+
+
 
 // Fetch default email configuration for given Jde report name.
-module.exports.fetchMailDefaults = function( dbCn, reportName, reportVersion, cb ) {
+module.exports.fetchMailDefaults = function( dbCn, jdeJob, reportName, reportVersion, cb ) {
 
   var emailConfig = [];
 
@@ -27,7 +40,7 @@ module.exports.fetchMailDefaults = function( dbCn, reportName, reportVersion, cb
 
     log.debug( 'Connection pased through.' );
     connection = dbCn;
-    queryJdeEmailConfig( connection, reportName, reportVersion, cb, emailConfig );
+    queryJdeEmailConfig( connection, jdeJob, reportName, reportVersion, cb, emailConfig );
 
   } else {
 
@@ -38,7 +51,7 @@ module.exports.fetchMailDefaults = function( dbCn, reportName, reportVersion, cb
         return;
       }
 
-      queryJdeEmailConfig( connection, reportName, reportVersion, cb, emailConfig );
+      queryJdeEmailConfig( connection, jdeJob, reportName, reportVersion, cb, emailConfig );
 
     });
   }
@@ -136,7 +149,7 @@ function removeOverrideOption( reportOptions, versionOptions, mailOptions, versi
 
 
 // Query the Jde Email Configuration Setup for this Report / Version.
-function queryJdeEmailConfig( connection, reportName, reportVersion, cb, emailConfig ) {
+function queryJdeEmailConfig( connection, jdeJob, reportName, reportVersion, cb, emailConfig ) {
 
   var query;
   log.debug( 'Fetch email config for Report: ' + reportName + ' version: ' + reportVersion);
@@ -159,14 +172,14 @@ function queryJdeEmailConfig( connection, reportName, reportVersion, cb, emailCo
       return;
     }
     
-    processResultsFromF559890( connection, rs.resultSet, 1, cb, emailConfig );     
+    processResultsFromF559890( connection, jdeJob, rs.resultSet, 1, cb, emailConfig );     
 
   });
 }
 
 
 // Process results of query on F559890 Jde Email Config Setup
-function processResultsFromF559890( connection, rsF559890, numRows, cb, emailConfig ) {
+function processResultsFromF559890( connection, jdeJob, rsF559890, numRows, cb, emailConfig ) {
 
   rsF559890.getRows( numRows, function( err, rows ) {
     if ( err ) {
@@ -174,7 +187,7 @@ function processResultsFromF559890( connection, rsF559890, numRows, cb, emailCon
       log.verbose( 'No email configuration found' );
 
       // Error so let caller know...
-      cb( err, emailConfig );
+      cb( err, emailConfig, jdeJob );
 
     } else if ( rows.length == 0 ) {
       
@@ -182,7 +195,7 @@ function processResultsFromF559890( connection, rsF559890, numRows, cb, emailCon
       log.debug( 'Finished processing email configuration entries' );
 
       // Done processing so pass control to next function with results
-      cb( null, emailConfig );
+      cb( null, emailConfig, jdeJob );
 
     } else if ( rows.length > 0 ) {
  
@@ -193,7 +206,7 @@ function processResultsFromF559890( connection, rsF559890, numRows, cb, emailCon
       processEmailConfigEntry(  connection, emailConfigRecord, emailConfig );
 
       // Fetch next Email config entry
-      processResultsFromF559890( connection, rsF559890, 1, cb, emailConfig );     
+      processResultsFromF559890( connection, jdeJob, rsF559890, 1, cb, emailConfig );     
       
     }
   });
