@@ -20,7 +20,7 @@ var oracledb = require( 'oracledb' ),
 // So date and Time related database queries could miss jobs created on AIX unless we offset the time
 if ( typeof( aixTimeOffset ) === 'undefined' ) {
 
-  aixTimeOffset = 5;
+  aixTimeOffset = -115;
   log.debug( 'AIX Server Time Offset will be : ' + aixTimeOffset + ' for this run.' );
 
 }
@@ -137,7 +137,7 @@ exports.adjustTimestampByMinutes = function( timestamp, mins ) {
   newtm;
 	
   // Date and Time should be passed if not set to zeros and return adjusted by minutes value
-  if ( typeof( mins ) === 'undefined' ) mins = -5;
+  if ( typeof( mins ) === 'undefined' ) mins = aixTimeOffset;
   if ( typeof( timestamp ) !== 'undefined' ) {
     millisecs = timestamp.substr( 22, 13 );
     n = parseInt( millisecs );

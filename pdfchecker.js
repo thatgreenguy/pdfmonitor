@@ -41,7 +41,8 @@ var oracledb = require( 'oracledb' ),
 
 // Query the JDE Job Control Master file to fetch all PDF files generated since last audit entry
 // Only select PDF jobs that are registered for emailing
-module.exports.queryJdeJobControl = function( dbCn, chkDate, chkTime, pollInterval, hostname, lastPdf, performPolledProcess ) {
+module.exports.queryJdeJobControl = function( 
+  dbCn, chkDate, chkTime, pollInterval, hostname, lastPdf, performPolledProcess ) {
 
   var auditTimestamp,
   query,
@@ -95,13 +96,16 @@ module.exports.queryJdeJobControl = function( dbCn, chkDate, chkTime, pollInterv
           return;
         }
 
-        processResultsFromF556110( dbCn, rs.resultSet, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess );
+        processResultsFromF556110( 
+          dbCn, rs.resultSet, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess );
+
     }); 
 }
 
 
 // Process results of query on JDE Job Control file 
-function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess ) {
+function processResultsFromF556110( 
+  dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess ) {
 
   var jobControlRecord,
   finish;
@@ -126,14 +130,14 @@ function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterva
       log.debug( jobControlRecord );
 
       // Process PDF entry
-      processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, performPolledProcess );            
+      processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess );            
 
     }
   }); 
 }
 
 // Called to handle processing of first and subsequent 'new' PDF Entries detected in JDE Output Queue  
-function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, performPolledProcess ) {
+function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess ) {
 
   var cb = null,
     currentPdf;
@@ -150,7 +154,7 @@ function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval
   }
 
   // Process subsequent PDF entries if any - Read next Job Control record
-  processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess );
+  processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess );
 
 }
 
@@ -181,7 +185,7 @@ function processLockedPdfFile( dbCn, record, hostname ) {
         count = countRec[ 0 ];
         if ( count > 0 ) {
             log.verbose( 'JDE PDF ' + record[ 0 ] + " - Already Processed - Releasing Lock." );
-            lock.removeLock( record, hostname );
+            lock.removeLock( dbCn, record, hostname );
 
         } else {
              log.verbose( 'JDE PDF ' + record[0] + ' - Processing Started' );
@@ -191,7 +195,7 @@ function processLockedPdfFile( dbCn, record, hostname ) {
              // Last process step creates an audit entry which prevents file being re-processed by future runs 
              // so if error and lock removed - no audit entry therefore file will be re-processed by future run (recovery)	
              
-             processPDF( record, hostname ); 
+             processPDF( dbCn, record, hostname ); 
 
         }
     }); 
@@ -199,7 +203,7 @@ function processLockedPdfFile( dbCn, record, hostname ) {
 
 
 // Exclusive use / lock of PDF file established so free to process the file here.
-function processPDF( record, hostname ) {
+function processPDF( dbCn, record, hostname ) {
 
     var jcfndfuf2 = record[ 0 ],
         jcactdate = record[ 1 ],
@@ -209,7 +213,7 @@ function processPDF( record, hostname ) {
         parms = null;
 
     // Make parameters available to any function in series
-    parms = { "jcfndfuf2": jcfndfuf2, "record": record, "genkey": genkey, "hostname": hostname };
+    parms = { "dbCn": dbCn, "jcfndfuf2": jcfndfuf2, "record": record, "genkey": genkey, "hostname": hostname };
 
     async.series([
         function ( cb ) { passParms( parms, cb ) }, 
@@ -222,7 +226,7 @@ function processPDF( record, hostname ) {
              var prms = results[ 0 ];
 
              // Lose lock regardless whether PDF file proceesed correctly or not
-             removeLock( record, hostname );
+             removeLock( dbCn, record, hostname );
 
              // log results of Pdf processing
              if ( err ) {
@@ -248,18 +252,17 @@ function passParms(parms, cb) {
 function createAuditEntry( parms, cb ) {
 
   // Create Audit entry for this Processed record - once created it won't be processed again
-  audit.createAuditEntry( parms.jcfndfuf2, parms.genkey, parms.hostname, "PROCESSED - LOGO" );
+  audit.createAuditEntry( parms.dbCn, parms.jcfndfuf2, parms.genkey, parms.hostname, "PROCESSED - MAIL" );
   log.verbose( "JDE PDF " + parms.jcfndfuf2 + " - Audit Record written to JDE" );
   cb( null, "Audit record written" );
 }
 
 
-function removeLock( record, hostname ) {
+function removeLock( dbCn, record, hostname ) {
 
-  log.debug( 'removeLock: Record: ' + record );
-  log.debug( 'removeLock: Record: ' + hostname );
+  log.debug( 'removeLock: Record: ' + record + ' for host: ' + hostname );
 
-  lock.removeLock( record, hostname );
+  lock.removeLock( dbCn, record, hostname );
   log.verbose( 'JDE PDF ' + record[ 0 ] + ' - Lock Released' );
    
 }

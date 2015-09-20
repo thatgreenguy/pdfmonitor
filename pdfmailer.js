@@ -16,7 +16,7 @@ var oracledb = require( 'oracledb' ),
   mounts = require( './common/mounts.js' ),
   audit = require( './common/audit.js' ),
   pdfChecker = require( './pdfchecker.js' ),
-  pollInterval =  3000,
+  pollInterval =  5000,
   dbCn = null,
   dbCredentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
   hostname = process.env.HOSTNAME,
@@ -139,7 +139,8 @@ function performPostRemoteMountChecks( err, data ) {
   } else {
 
     // Remote mounts okay so go ahead and process, checking for new Pdf's etc
-    pdfChecker.queryJdeJobControl( dbCn, checkDate, checkTime, pollInterval, hostname, lastPdf, scheduleNextPolledProcess );
+    pdfChecker.queryJdeJobControl( 
+      dbCn, checkDate, checkTime, pollInterval, hostname, lastPdf, scheduleNextPolledProcess );
   }
 
 }
