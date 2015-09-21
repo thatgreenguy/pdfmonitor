@@ -6,18 +6,18 @@
 // Synopsis
 // --------
 //
-// Establish remote mount connectivity via sshfs to the Jde PrintQueue directory on the (AIX) Enterprise server
-// Perform medium frequency polling of the Oracle (JDE) table which holds information on Jde UBE jobs
-// When detecting new JDE PDF files that have been configured (in Jde) to be emailed out then handle email
-// transmission 
+// Performs high frequency monitoring of the JDE Job Control table for completing Jde jobs.
+// When a job completes a check is made to see if it's configured for any post PDF processing such as Logo's or Email.
+// If it is an entry is added for the Job to the F559811 Dlink Post PDF Handling Queue.
+// Entries added in the Queue will be picked up and processed by PDFHANDLER or PDFMAILER applications
+// This application only monitors and adds entries to the Queue.
 
 
 var oracledb = require( 'oracledb' ),
   log = require( './common/logger.js' ),
-  mounts = require( './common/mounts.js' ),
   audit = require( './common/audit.js' ),
   pdfChecker = require( './pdfchecker.js' ),
-  pollInterval =  5000,
+  pollInterval =  2500,
   dbCn = null,
   dbCredentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
   hostname = process.env.HOSTNAME,
@@ -72,13 +72,10 @@ if ( typeof( hostname ) === 'undefined' || hostname === '' ) {
 // startMonitoring()
 // performPolledProcess()
 // scheduleNextPolledProcess()
-// performPostRemoteMountChecks( err, data )
-// reconnectToJde( err )
-// performPostEstablishRemoteMounts( err, data )
 
 
 // On startup determine Date and Time of last processed report and continue processing from there
-// If first time ever run or Audit Log file cleared then start from monitoring from Now
+// If first time ever run or Audit Log file cleared then start monitoring from Now adjusted by Aix server time offset (if any)
 function startMonitoring( err, data ) {
 
   if ( err ) {
@@ -92,9 +89,8 @@ function startMonitoring( err, data ) {
     checkTime = data.lastAuditEntryTime;
     lastPdf = data.lastAuditEntryJob;
 
-    log.info( 'Monitor for new Jde Jobs completing from : ' + checkDate + ' ' + checkTime + ' then every : ' + pollInterval + ' milliseconds, Aix Server Time Offset is: ' + audit.aixTimeOffset + ' minutes'); 
+    log.info( 'Begin Monitoring from : ' + checkDate + ' ' + checkTime + ' then every : ' + pollInterval + ' milliseconds, Aix Server Time Offset is: ' + audit.aixTimeOffset + ' minutes'); 
 
-    // Startup has valid Date and Time to check from so perform checks then repeat periodically
     performPolledProcess();
 
   }
@@ -104,18 +100,22 @@ function startMonitoring( err, data ) {
 // Initiates polled process that is responsible for monitoring for new Jde reports arriving in Print Queue
 function performPolledProcess() {
 
-  // Check remote mounts to Jde Pdf files are working then process
-  mounts.checkRemoteMounts( performPostRemoteMountChecks );
+  pdfChecker.queryJdeJobControl( dbCn, checkDate, checkTime, pollInterval, hostname, lastPdf, scheduleNextPolledProcess );
 
 }
 
-// Handles scheduling of the next run of the frequently polled process 
+// Handles scheduling of the next run of this high frequency polled process 
 function scheduleNextPolledProcess() {
 
   var ts,
     ats;
 
-  // Check done so adjust Check Date and Time for next check - only interested in new PDF files now
+  // Check done so adjust Check Date and Time for next check - only interested in checking recently finished Jde jobs now and wat to keep the
+  // Sql query/resultset as light as possible.
+  // AIX Server time is not currently inline with all other servers which are synchronised by NTP - at time of writing it is behind by approx 3 minutes.
+  // This situation should be rectified but in the meantime a server Time Offset value is used to ensure current CENTOS time is adjusted back enough to 
+  // allow the next time check to actually pick up any recently completed Jde Jobs.
+
   ts = audit.createTimestamp();
   ats = audit.adjustTimestampByMinutes( ts );
 
@@ -123,57 +123,8 @@ function scheduleNextPolledProcess() {
   checkDate = ats.jdeDate;
   checkTime = ats.jdeTime;
 
-  log.debug( 'Will Check again in : ' + pollInterval + ' milliseconds, using Date: ' + checkDate + ' time: ' + checkTime );
+  log.debug( 'Next Check in : ' + pollInterval + ' milliseconds, using Date: ' + checkDate + ' and time: ' + checkTime );
   setTimeout( performPolledProcess, pollInterval );
 
 }
 
-
-// Called after remote mounts to Jde have been checked
-function performPostRemoteMountChecks( err, data ) {
-
-  if ( err ) {
-
-    // Problem with remote mounts so need to reconnect before doing anything else
-    reconnectToJde( err );
-
-  } else {
-
-    // Remote mounts okay so go ahead and process, checking for new Pdf's etc
-    pdfChecker.queryJdeJobControl( 
-      dbCn, checkDate, checkTime, pollInterval, hostname, lastPdf, scheduleNextPolledProcess );
-  }
-
-}
-
-
-// Problem with remote mounts to jde so attempt to reconnect 
-function reconnectToJde( err ) {
-
-    log.debug( 'Error data: ' +  err );
-    log.warn( 'Issue with Remote mounts to JDE - Attempting to reconnect.' );
-
-    mounts.establishRemoteMounts( performPostEstablishRemoteMounts );
-
-}
-
-
-// Called after establish remote mounts to Jde has been processed
-function performPostEstablishRemoteMounts( err, data ) {
-
-  if ( err ) {
-
-    // Unable to reconnect to Jde at the moment so pause and retry shortly
-    log.warn( '' );
-    log.warn( 'Unable to re-establish remote mounts to Jde will pause and retry' );
-    scheduleNextPolledProcess();
-
-  } else {
-
-    // Remote mounts okay so resume normal processing 
-    log.verbose( 'Remote mounts to Jde re-established - will continue normally')
-    pdfChecker.queryJdeJobControl( 
-      dbCn, checkDate, checkTime, pollInterval, hostname, lastPdf, scheduleNextPolledProcess );
-
-  }
-}

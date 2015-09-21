@@ -13,36 +13,24 @@
 
 
 var oracledb = require( 'oracledb' ),
-  lock = require( './common/lock.js' ),
   log = require( './common/logger.js' ),
   audit = require( './common/audit.js' ),
-  mail = require( './common/mail.js' ),
-  async = require( 'async' ),
-  exec = require( 'child_process' ).exec,
-  dirRemoteJdePdf = process.env.DIR_JDEPDF,
-  dirLocalJdePdf = process.env.DIR_SHAREDDATA,
   numRows = 1,
   begin = null;
 
 
 // Functions -
 //
-// module.exports.queryJdeJobControl( dbCn, record, begin, pollInterval, hostname, lastPdf, performPolledProcess )
+// module.exports.queryJdeJobControl( dbCn, chkDate, chkTime, pollInterval, hostname, lastPdf, performPolledProcess )
 // function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess )
 // function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, performPolledProcess )
-// function processLockedPdfFile(dbCn, record, hostname )
-// function processPDF( record, hostname )
-// function passParms(parms, cb)
-// function createAuditEntry( parms, cb )
-// function removeLock( record, hostname )
 // function oracleResultsetClose( dbCn, rs )
 // function oracledbCnRelease( dbCn )
 
 
 // Query the JDE Job Control Master file to fetch all PDF files generated since last audit entry
 // Only select PDF jobs that are registered for emailing
-module.exports.queryJdeJobControl = function( 
-  dbCn, chkDate, chkTime, pollInterval, hostname, lastPdf, performPolledProcess ) {
+module.exports.queryJdeJobControl = function(  dbCn, chkDate, chkTime, pollInterval, hostname, lastPdf, performPolledProcess ) {
 
   var auditTimestamp,
   query,
