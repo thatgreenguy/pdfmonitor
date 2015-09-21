@@ -37,7 +37,7 @@ log.transports.console.level = logLevel;
 
 // Expect a valid docker hostname which is used for lock control and log file entries
 log.info( '' );
-log.info( '---------- Dlink Report Mailer - Start Monitoring JDE PrintQueue Jobs ----------'  );
+log.info( '---------- Dlink JDE Job Monitor - Start Monitoring JDE PrintQueue Jobs ----------'  );
 
 if ( typeof( hostname ) === 'undefined' || hostname === '' ) {
   log.error( 'pdfhandler.js expects environment variable HOSTNAME to be set by docker container' );
