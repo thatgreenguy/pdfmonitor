@@ -64,7 +64,7 @@ exports.createAuditEntry = function( odbCn, pdfjob, genkey, ctrid, status, dbCn 
   log.debug( query );
 
   odbCn.execute( query, 
-    [timestamp, pdfjob, genkey, ctrid, status, 'PDFMAILER', 'CENTOS', 'DOCKER', jdedate, jdetime ],
+    [timestamp, pdfjob, genkey, ctrid, status, 'PDFMONITOR', 'CENTOS', 'DOCKER', jdedate, jdetime ],
     { autoCommit: true }, 
     function( err, rs ) {
 
