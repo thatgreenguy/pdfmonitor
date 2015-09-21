@@ -1,15 +1,15 @@
 // pdfchecker.js  : Check Jde Job Control table looking for any recently generated Pdf files that are configured 
-//                : in JDE to be eligible for Email delivery.
+//                : in JDE for some kind of post Pdf processing when found add them to process Queue.
 // Author         : Paul Green
-// Dated          : 2015-09-03
+// Dated          : 2015-09-21
 //
 // Synopsis
 // --------
 //
-// Called periodically by pdfmailer.js
+// Called periodically by pdfmonitor.js
 // It checks the Jde Job Control Audit table looking for recently completed UBE reports.
-// New PDF files are cross checked against JDE email configuration and and if email delivery is required then the report
-// is sent to all configured recipients
+// New PDF files are cross checked against JDE email configuration and if some kind of post pdf processing is required
+// e.g. Logos or mailing then the Jde Job is added to the F559810 DLINK Post PDF Handling Queue
 
 
 var oracledb = require( 'oracledb' ),
@@ -72,7 +72,8 @@ module.exports.queryJdeJobControl = function(
         query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
         query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= ";
         query += chkDate + ' AND jcacttime >= ' + chkTime;
-        query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER') ";
+        query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ";
+        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid in ( 'PDFMAILER', 'PDFHANDLER' ) )";
         query += " ORDER BY jcactdate, jcacttime";
     	
 	log.debug( 'Check Date matches Todays Date : ' + jdeDateToday + ' see: ' + chkDate);
@@ -82,7 +83,8 @@ module.exports.queryJdeJobControl = function(
         query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
         query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= ";
         query += chkDate;
-        query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER') ";
+        query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ";
+        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid in ( 'PDFMAILER', 'PDFHANDLER' )   )";
         query += " ORDER BY jcactdate, jcacttime";
     	
 	log.debug( 'Check Date is not today : ' + jdeDateToday + ' see: ' + chkDate);
@@ -91,9 +93,12 @@ module.exports.queryJdeJobControl = function(
     log.debug(query);
 
     dbCn.execute( query, [], { resultSet: true }, function( err, rs ) {
+
         if ( err ) { 
+
           log.error( err.message );
           return;
+
         }
 
         processResultsFromF556110( 
@@ -105,24 +110,26 @@ module.exports.queryJdeJobControl = function(
 
 // Process results of query on JDE Job Control file 
 function processResultsFromF556110( 
-  dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess ) {
+  dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, sleepThenRepeat ) {
 
   var jobControlRecord,
   finish;
 
   rsF556110.getRows( numRows, function( err, rows ) {
     if ( err ) { 
+
       oracleResultsetClose( dbCn, rsF556110 );
       log.debug("rsF556110 Error");
       return;
 	
     } else if ( rows.length == 0 ) {
+
       oracleResultsetClose( dbCn, rsF556110 );
       finish = new Date();
       log.verbose( 'End Check: ' + finish  + ' took: ' + ( finish - begin ) + ' milliseconds, Last Pdf: ' + lastPdf );
  
       // No more Job control records to process in this run - this run is done - so schedule next run
-      performPolledProcess();
+      sleepThenRepeat();
 
     } else if ( rows.length > 0 ) {
 
@@ -130,14 +137,14 @@ function processResultsFromF556110(
       log.debug( jobControlRecord );
 
       // Process PDF entry
-      processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess );            
+      processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, chkDate, chkTime, sleepThenRepeat );            
 
     }
   }); 
 }
 
 // Called to handle processing of first and subsequent 'new' PDF Entries detected in JDE Output Queue  
-function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess ) {
+function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, chkDate, chkTime, sleepThenRepeat ) {
 
   var cb = null,
     currentPdf;
@@ -148,131 +155,13 @@ function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval
   // If Last Pdf is same as current Pdf then nothing changed since last check
   if ( lastPdf !== currentPdf ) {
 
-    // Process second and subsequent records.
-    cb = function() { processLockedPdfFile( dbCn, jobControlRecord, hostname ); }
-    lock.gainExclusivity( dbCn, jobControlRecord, hostname, cb );		
+    log.verbose( 'New PDF detected - adding ' + jobControlRecord + ' to F559810 Dlink Post PDF Process Queue' );
+
   }
 
   // Process subsequent PDF entries if any - Read next Job Control record
-  processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, performPolledProcess );
+  processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, sleepThenRepeat );
 
-}
-
-
-// Called when exclusive lock has been successfully placed to process the PDF file
-function processLockedPdfFile( dbCn, record, hostname ) {
-
-    var query,
-        countRec,
-        count,
-        cb = null;
-
-    log.verbose( 'JDE PDF ' + record[ 0 ] + " - Lock established" );
-
-    // Check this PDF file has definitely not yet been processed by any other pdfmailer instance
-    // that may be running concurrently
-
-    query = "SELECT COUNT(*) FROM testdta.F559849 WHERE pafndfuf2 = '";
-    query += record[0] + "'";
-
-    dbCn.execute( query, [], { }, function( err, result ) {
-        if ( err ) { 
-            log.debug( err.message );
-            return;
-        };
-
-        countRec = result.rows[ 0 ];
-        count = countRec[ 0 ];
-        if ( count > 0 ) {
-            log.verbose( 'JDE PDF ' + record[ 0 ] + " - Already Processed - Releasing Lock." );
-            lock.removeLock( dbCn, record, hostname );
-
-        } else {
-             log.verbose( 'JDE PDF ' + record[0] + ' - Processing Started' );
-
-             // This PDF file has not yet been processed and we have the lock so process it now.
-             // Note: Lock will be removed if all process steps complete or if there is an error
-             // Last process step creates an audit entry which prevents file being re-processed by future runs 
-             // so if error and lock removed - no audit entry therefore file will be re-processed by future run (recovery)	
-             
-             processPDF( dbCn, record, hostname ); 
-
-        }
-    }); 
-}
-
-
-// Exclusive use / lock of PDF file established so free to process the file here.
-function processPDF( dbCn, record, hostname ) {
-
-    var jcfndfuf2 = record[ 0 ],
-        jcactdate = record[ 1 ],
-        jcacttime = record[ 2 ],
-        jcprocessid = record[ 3 ],
-        genkey = jcactdate + " " + jcacttime,
-        parms = null;
-
-    // Make parameters available to any function in series
-    parms = { "dbCn": dbCn, "jcfndfuf2": jcfndfuf2, "record": record, "genkey": genkey, "hostname": hostname };
-
-    async.series([
-        function ( cb ) { passParms( parms, cb ) }, 
-        function ( cb ) { emailReport( parms, cb ) }, 
-        function ( cb ) { createAuditEntry( parms, cb ) }
-        ], function(err, results) {
-
-             var prms = results[ 0 ];
-
-             // Lose lock regardless whether PDF file proceesed correctly or not
-             removeLock( dbCn, record, hostname );
-
-             // log results of Pdf processing
-             if ( err ) {
-               log.error("JDE PDF " + prms.jcfndfuf2 + " - Processing failed - check logs in ./logs");
-	     } else {
-               log.info("JDE PDF " + prms.jcfndfuf2 + " - Mail Processing Complete");
-             }
-           }
-    );
-}
-
-
-// Ensure required parameters for releasing lock are available in final async function
-// Need to release lock if PDF file processed okay or failed with errors so it can be picked up and recovered by future runs!
-// For example sshfs dbCn to remote directories on AIX might go down and re-establish later
-function passParms(parms, cb) {
-
-  cb( null, parms);  
-
-}
-
-
-function emailReport( parms, cb ) {
-
-  // Email report
-  log.verbose( "JDE PDF " + parms.jcfndfuf2 + " - Mailing JDE Report" );
-
-  mail.prepMail( parms.dbCn, parms.jcfndfuf2, cb );    
-
-}
-
-
-function createAuditEntry( parms, cb ) {
-
-  // Create Audit entry for this Processed record - once created it won't be processed again
-  audit.createAuditEntry( parms.dbCn, parms.jcfndfuf2, parms.genkey, parms.hostname, "PROCESSED - MAIL" );
-  log.verbose( "JDE PDF " + parms.jcfndfuf2 + " - Audit Record written to JDE" );
-  cb( null, "Audit record written" );
-}
-
-
-function removeLock( dbCn, record, hostname ) {
-
-  log.debug( 'removeLock: Record: ' + record + ' for host: ' + hostname );
-
-  lock.removeLock( dbCn, record, hostname );
-  log.verbose( 'JDE PDF ' + record[ 0 ] + ' - Lock Released' );
-   
 }
 
 

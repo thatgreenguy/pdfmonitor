@@ -1,6 +1,7 @@
-// pdfmailer.js   : Monitor JDE Output Queue for any configured reports that require email delivery   
+// pdfmonitor.js  : Monitor JDE Print Queue for new arrivals taht are configured for Post PDF processing
+//                  and add them to the F559810 Dlink Post PDF Handling Queue   
 // Author         : Paul Green
-// Date           : 2015-09-10
+// Date           : 2015-09-21
 //
 // Synopsis
 // --------
@@ -30,7 +31,7 @@ var oracledb = require( 'oracledb' ),
 //
 // Set logging level for console output
 if ( typeof(logLevel) === 'undefined' ) {
-  logLevel = 'verbose';
+  logLevel = 'debug';
 }
 log.transports.console.level = logLevel;
 
@@ -57,7 +58,7 @@ if ( typeof( hostname ) === 'undefined' || hostname === '' ) {
     dbCn = cn;
 
     // Log process startup in Jde Audit table 
-    audit.createAuditEntry( dbCn, 'pdfmailer', 'pdfmailer.js', hostname, 'Start Jde Report Email handler' );
+    audit.createAuditEntry( dbCn, 'pdfmonitor', 'pdfmonitor.js', hostname, 'Start Monitoring JDE Print Queue' );
 
     // On startup determine Date and Time of last processed file or if none use current Date and TimeWhen process start perform the polled processing immediately then it will repeat periodically
     audit.determineLastProcessedDateTime( err, dbCn, startMonitoring );   
@@ -82,7 +83,7 @@ function startMonitoring( err, data ) {
 
   if ( err ) {
 
-    log.error( 'PDFMAILER Startup failed : ' + err );
+    log.error( 'PDFMONITOR Startup failed : ' + err );
     process.exit( 1 );
 
   } else {
@@ -91,16 +92,16 @@ function startMonitoring( err, data ) {
     checkTime = data.lastAuditEntryTime;
     lastPdf = data.lastAuditEntryJob;
 
-    log.info( 'Monitoring starts from : ' + checkDate + ' ' + checkTime + ' then every : ' + pollInterval + ' milliseconds, Aix Server Time Offset is: ' + audit.aixTimeOffset + ' minutes'); 
+    log.info( 'Monitor for new Jde Jobs completing from : ' + checkDate + ' ' + checkTime + ' then every : ' + pollInterval + ' milliseconds, Aix Server Time Offset is: ' + audit.aixTimeOffset + ' minutes'); 
 
-    // Startup has check Date and Time so can now perform any mail operations then monitor periodically
+    // Startup has valid Date and Time to check from so perform checks then repeat periodically
     performPolledProcess();
 
   }
 }
 
 
-// Initiates polled process that is responsible for emailing Jde report files
+// Initiates polled process that is responsible for monitoring for new Jde reports arriving in Print Queue
 function performPolledProcess() {
 
   // Check remote mounts to Jde Pdf files are working then process
