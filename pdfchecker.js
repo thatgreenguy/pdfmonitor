@@ -149,12 +149,10 @@ function processPdfEntry( dbCn, rsF556110, begin, record, pollInterval, hostname
   jdeJobCompleted = record[ 1 ] + ' ' + record[ 2 ];
 
   currentPdf = record[ 0 ];
-  log.debug('Last PDF: ' + lastPdf + ' currentPdf: ' + currentPdf );
+  log.verbose('Last PDF: ' + lastPdf + ' currentPdf: ' + currentPdf );
 
   // If Last Pdf is same as current Pdf then nothing changed since last check
   if ( lastPdf !== currentPdf ) {
-
-    log.verbose( 'New PDF detected - adding ' + record + ' to F559811 Dlink Post PDF Process Queue' );
 
     query = "INSERT INTO testdta.F559811 VALUES (:jpfndfuf2, :jpsawlatm, :jpactivid, :jpyexpst, :jpblkk, :jppid, :jpjobn, :jpuser, :jpupmj, :jpupmt )";
     log.debug( query );
@@ -171,7 +169,7 @@ function processPdfEntry( dbCn, rsF556110, begin, record, pollInterval, hostname
           return;
         }
 
-        log.verbose( 'New PDF ' + record + ' added to F559811 Dlink Post PDF Process Queue' );    
+        log.info( 'New PDF ' + record[ 0 ] + ' added to F559811 Dlink Post PDF Process Queue' );    
 
       }
      );
