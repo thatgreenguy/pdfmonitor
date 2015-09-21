@@ -117,10 +117,7 @@ function scheduleNextPolledProcess() {
   // allow the next time check to actually pick up any recently completed Jde Jobs.
 
   ts = audit.createTimestamp();
-log.warn( 'timestamp: ' + ts );
-
   ats = audit.adjustTimestampByMinutes( ts );
-log.warn( 'adjusted timestamp: ' + ats );
 
   // Set check Date and Time for next scheduled process
   checkDate = ats.jdeDate;
