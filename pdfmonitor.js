@@ -58,7 +58,7 @@ if ( typeof( hostname ) === 'undefined' || hostname === '' ) {
     dbCn = cn;
 
     // Log process startup in Jde Audit table 
-    audit.createAuditEntry( dbCn, 'pdfmonitor', 'pdfmonitor.js', hostname, 'Start Monitoring JDE Print Queue' );
+    audit.createAuditEntry( dbCn, 'pdfmonitor', 'pdfmonitor.js', hostname, 'Start JDE PrintQueue Monitor' );
 
     // On startup determine Date and Time of last processed file or if none use current Date and TimeWhen process start perform the polled processing immediately then it will repeat periodically
     audit.determineLastProcessedDateTime( err, dbCn, startMonitoring );   
@@ -170,9 +170,10 @@ function performPostEstablishRemoteMounts( err, data ) {
 
   } else {
 
-    // Remote mounts okay so go ahead and process, checking for new Pdf's etc
+    // Remote mounts okay so resume normal processing 
     log.verbose( 'Remote mounts to Jde re-established - will continue normally')
-    pdfChecker.performJdePdfProcessing( dbCn, dbCredentials, pollInterval, hostname, lastPdf, scheduleNextPolledProcess );
-  }
+    pdfChecker.queryJdeJobControl( 
+      dbCn, checkDate, checkTime, pollInterval, hostname, lastPdf, scheduleNextPolledProcess );
 
+  }
 }

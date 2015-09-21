@@ -20,7 +20,7 @@ var oracledb = require( 'oracledb' ),
 // So date and Time related database queries could miss jobs created on AIX unless we offset the time
 if ( typeof( aixTimeOffset ) === 'undefined' ) {
 
-  aixTimeOffset = -215;
+  aixTimeOffset = -5;
   log.debug( 'AIX Server Time Offset will be : ' + aixTimeOffset + ' for this run.' );
 
 }
@@ -36,7 +36,7 @@ exports.aixTimeOffset = aixTimeOffset;
 // exports getJdeAuditTime function( dt, padChar ) 
 // exports adjustTimestampByMinutes function( timestamp, mins ) 
 // exports determineLastProcessedDateTime function( err, dbCn, cb ) 
-// processResultsFromF559849( dbCn, rsF559849, numRows, cb) 
+// processResultsFromF559811( dbCn, rsF559811, numRows, cb) 
 // oracleResultSetClose( dbCn, rs ) 
 // oracledbCnRelease( dbCn ) 
 
@@ -165,8 +165,8 @@ exports.determineLastProcessedDateTime = function( err, dbCn, cb ) {
 
   var query = null;
 	
-  query  = "SELECT paupmj, paupmt, pasawlatm, pafndfuf2, pablkk FROM testdta.F559849 ";
-  query += "WHERE RTRIM(PAFNDFUF2, ' ') <> 'pdfmailer' ORDER BY pasawlatm DESC";
+  query  = "SELECT jpupmj, jpupmt, jpsawlatm, jpfndfuf2, jpblkk FROM testdta.F559811 ";
+  query += " ORDER BY jpsawlatm DESC";
 
   dbCn.execute( query, [], { resultSet: true }, 
   function( err, rs ) {
@@ -176,16 +176,16 @@ exports.determineLastProcessedDateTime = function( err, dbCn, cb ) {
       return cb( err, null );
     };
 
-    processResultsFromF559849( dbCn, rs.resultSet, 1, cb );
+    processResultsFromF559811( dbCn, rs.resultSet, 1, cb );
 
   });
 }
 
 
 
-// Process results from JDE Audit Log table Query but only interested in last Pdf job processed
-// to determine date and time which is required to begin monitoring JDE report queue
-function processResultsFromF559849( dbCn, rsF559849, numRows, cb) {
+// Process results from JDE Dlink Post Pdf handling Queue table but only interested in last Pdf job added to the Queue
+// to determine date and time which is required to start monitoring from
+function processResultsFromF559811( dbCn, rs, numRows, cb) {
 
   var auditRecord,
     tokens,
@@ -193,16 +193,18 @@ function processResultsFromF559849( dbCn, rsF559849, numRows, cb) {
     ts = null;
     ats = null;
 
-  rsF559849.getRows( numRows, function( err, rows ) {
+  rs.getRows( numRows, 
+  function( err, rows ) {
+  
     if ( err ) {
 
-      oracleResultSetClose( dbCn, rsF559849 );
+      oracleResultSetClose( dbCn, rs );
       cb( err, null );
 
     } else if ( rows.length == 0 ) {
 
       log.verbose( 'Last Audit Entry: Not found use current Date and Time' );
-      oracleResultSetClose( dbCn, rsF559849 );
+      oracleResultSetClose( dbCn, rs );
 
       // Get current Date and Time adjusted by Aix Server Time Offset
       ts = exports.createTimestamp();      
@@ -219,7 +221,7 @@ function processResultsFromF559849( dbCn, rsF559849, numRows, cb) {
       // Last audit entry retrieved
       // Determine Date and Time to start monitoring from then pass control onwards
       log.verbose( 'Last Audit Entry: ' + rows[ 0 ] );
-      oracleResultSetClose( dbCn, rsF559849 );
+      oracleResultSetClose( dbCn, rs );
 
       jdedatetime = rows[ 0 ][ 4 ];
       tokens = jdedatetime.split(' ');
@@ -228,9 +230,8 @@ function processResultsFromF559849( dbCn, rsF559849, numRows, cb) {
       data[ 'lastAuditEntryTime' ] = tokens[ 1 ];
       data[ 'lastAuditEntryJob' ] = rows[ 0 ][ 3 ];
 
-      cb( null, { 'lastAuditEntryDate': tokens[ 0 ], 
-                  'lastAuditEntryTime': tokens[ 1 ],
-                  'lastAuditEntryJob': rows[ 0 ][ 3 ]} );
+      cb( null, data );
+
     }
   });
 }

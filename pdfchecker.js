@@ -9,7 +9,7 @@
 // Called periodically by pdfmonitor.js
 // It checks the Jde Job Control Audit table looking for recently completed UBE reports.
 // New PDF files are cross checked against JDE email configuration and if some kind of post pdf processing is required
-// e.g. Logos or mailing then the Jde Job is added to the F559810 DLINK Post PDF Handling Queue
+// e.g. Logos or mailing then the Jde Job is added to the F559811 DLINK Post PDF Handling Queue
 
 
 var oracledb = require( 'oracledb' ),
@@ -72,8 +72,8 @@ module.exports.queryJdeJobControl = function(
         query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
         query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= ";
         query += chkDate + ' AND jcacttime >= ' + chkTime;
-        query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ";
-        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid in ( 'PDFMAILER', 'PDFHANDLER' ) )";
+        query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
+        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' )";
         query += " ORDER BY jcactdate, jcacttime";
     	
 	log.debug( 'Check Date matches Todays Date : ' + jdeDateToday + ' see: ' + chkDate);
@@ -84,7 +84,7 @@ module.exports.queryJdeJobControl = function(
         query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= ";
         query += chkDate;
         query += " AND RTRIM( SUBSTR(jcfndfuf2, 0, (INSTR(jcfndfuf2, '_') - 1)), ' ') in ";
-        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid in ( 'PDFMAILER', 'PDFHANDLER' )   )";
+        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' )";
         query += " ORDER BY jcactdate, jcacttime";
     	
 	log.debug( 'Check Date is not today : ' + jdeDateToday + ' see: ' + chkDate);
@@ -144,18 +144,49 @@ function processResultsFromF556110(
 }
 
 // Called to handle processing of first and subsequent 'new' PDF Entries detected in JDE Output Queue  
-function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, chkDate, chkTime, sleepThenRepeat ) {
+function processPdfEntry( dbCn, rsF556110, begin, record, pollInterval, hostname, lastPdf, chkDate, chkTime, sleepThenRepeat ) {
 
   var cb = null,
-    currentPdf;
+    currentPdf,
+    query,
+    dt, 
+    jdead,
+    jdeat,
+    jdeJobCompleted;
 
-  currentPdf = jobControlRecord[ 0 ];
+  dt = new Date();
+  ts = audit.createTimestamp( dt );
+  jdead = audit.getJdeJulianDate( dt );
+  jdeat = audit.getJdeAuditTime( dt );
+  jdeJobCompleted = record[ 1 ] + ' ' + record[ 2 ];
+
+  currentPdf = record[ 0 ];
   log.debug('Last PDF: ' + lastPdf + ' currentPdf: ' + currentPdf );
 
   // If Last Pdf is same as current Pdf then nothing changed since last check
   if ( lastPdf !== currentPdf ) {
 
-    log.verbose( 'New PDF detected - adding ' + jobControlRecord + ' to F559810 Dlink Post PDF Process Queue' );
+    log.verbose( 'New PDF detected - adding ' + record + ' to F559811 Dlink Post PDF Process Queue' );
+
+    query = "INSERT INTO testdta.F559811 VALUES (:jpfndfuf2, :jpsawlatm, :jpactivid, :jpyexpst, :jpblkk, :jppid, :jpjobn, :jpuser, :jpupmj, :jpupmt )";
+    log.debug( query );
+
+    dbCn.execute( query,
+      [ currentPdf, ts, hostname, '100', jdeJobCompleted, 'PDFMONITOR', 'CENTOS', 'DOCKER', jdead, jdeat ],
+      { autoCommit: true },
+      function( err, rs ) {
+
+        // Once record written the check date and time should advance so in theory the process should not try
+        // add add same record multiple times - but if this should happen its not an error.
+        if ( err ) {
+          log.debug( 'PDF already recorded in F559811 - This message can be ignored unless it happens continuously' );
+          return;
+        }
+
+        log.verbose( 'New PDF ' + record + ' added to F559811 Dlink Post PDF Process Queue' );    
+
+      }
+     );
 
   }
 
