@@ -135,9 +135,10 @@ exports.adjustTimestampByMinutes = function( timestamp, mins ) {
   adjdt = null,
   newdt,
   newtm;
-	
+
   // Date and Time should be passed if not set to zeros and return adjusted by minutes value
-  if ( typeof( mins ) === 'undefined' ) mins = aixTimeOffset;
+  if ( typeof( mins ) === 'undefined' ) mins = parseInt( aixTimeOffset );
+
   if ( typeof( timestamp ) !== 'undefined' ) {
     millisecs = timestamp.substr( 22, 13 );
     n = parseInt( millisecs );
@@ -146,6 +147,7 @@ exports.adjustTimestampByMinutes = function( timestamp, mins ) {
 
   // Get timestamp date adjusted by however minutes
   adjdt = new Date( dt.setMinutes( dt.getMinutes() + mins ) );
+
 	
   // Return Jde Julian style Date and Times 
   newdt = module.exports.getJdeJulianDate( adjdt );

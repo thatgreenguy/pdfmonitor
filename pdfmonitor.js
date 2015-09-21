@@ -98,7 +98,7 @@ function startMonitoring( err, data ) {
 
 
 // Initiates polled process that is responsible for monitoring for new Jde reports arriving in Print Queue
-function performPolledProcess() {
+function performPolledProcess( ) {
 
   pdfChecker.queryJdeJobControl( dbCn, checkDate, checkTime, pollInterval, hostname, lastPdf, scheduleNextPolledProcess );
 
@@ -117,14 +117,18 @@ function scheduleNextPolledProcess() {
   // allow the next time check to actually pick up any recently completed Jde Jobs.
 
   ts = audit.createTimestamp();
+log.warn( 'timestamp: ' + ts );
+
   ats = audit.adjustTimestampByMinutes( ts );
+log.warn( 'adjusted timestamp: ' + ats );
 
   // Set check Date and Time for next scheduled process
   checkDate = ats.jdeDate;
   checkTime = ats.jdeTime;
 
   log.debug( 'Next Check in : ' + pollInterval + ' milliseconds, using Date: ' + checkDate + ' and time: ' + checkTime );
-  setTimeout( performPolledProcess, pollInterval );
+  
+  setTimeout( function() { performPolledProcess( checkDate, checkTime ) }, pollInterval );
 
 }
 
