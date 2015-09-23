@@ -43,7 +43,7 @@ module.exports.poolTimeout;
 // Create a connection Pool.
 module.exports.createPool = function( cb ) {
 
-  oracledb.createPool( credentials, function( err, cb ) {
+  oracledb.createPool( credentials, function( err, pool ) {
 
     if ( err ) {
  
@@ -58,7 +58,7 @@ module.exports.createPool = function( cb ) {
       cb( null, pool );      
 
     }
-  }
+  });
 }
 
 
@@ -80,7 +80,7 @@ module.exports.terminatePool = function( pool, cb ) {
       cb( null );
 
     }
-  }
+  });
 }
 
 
