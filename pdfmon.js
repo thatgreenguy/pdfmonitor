@@ -3,8 +3,7 @@ var odb = require( './common/odb.js' ),
   ondeath = require( 'death' )({ uncaughtException: true }),
   poolRetryInterval = 15000,
   pollInterval = 2000,
-  dbp = null,
-  processExitCount = 0;
+  dbp = null;
 
 
 startUp();
@@ -86,34 +85,24 @@ function scheduleNextMonitorProcess( dbp ) {
 // Release any oracle database resources then exit
 function exitControlled( signal, err ) {
 
-  if ( processExitCount != 0 ) {
-
-    // Assume problem attempting cleanup code and just get out
-    exitProcess();
+  if ( err ) {
+   
+    log.e( 'Received error from ondeath?' + err ); 
 
   } else {
 
-    processExitCount++;
+    log.e( 'Node process has died or been interrupted - Signal: ' + signal );
+    log.e( 'Normally this would be due to DOCKER STOP command or CTRL-C or perhaps a crash' );
+    log.e( 'Attempting Cleanup of Oracle DB resources before final exit' );
 
-    if ( err ) {
-   
-      log.e( 'Received error from ondeath?' + err ); 
+    if ( dbp ) {
+
+      odb.terminatePool( dbp, exitProcess );
 
     } else {
 
-      log.e( 'Node process has died or been interrupted - Signal: ' + signal );
-      log.e( 'Normally this would be due to DOCKER STOP command or CTRL-C or perhaps a crash' );
-      log.e( 'Attempting Cleanup of Oracle DB resources before final exit' );
+      exitProcess();
 
-      if ( dbp ) {
-
-        odb.terminatePool( dbp, exitProcess );
-
-      } else {
-
-        ExitProcess();
-
-      }
     }
   }
 
