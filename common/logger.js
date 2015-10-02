@@ -38,4 +38,36 @@ module.exports.stream = {
     }
 };
 
+module.exports.i = function( str ) {
 
+  logger.info( now() + ' ' + str );
+
+} 
+
+
+module.exports.v = function( str ) {
+
+  logger.verbose( now() + ' ' + str );
+
+} 
+
+
+module.exports.d = function( str ) {
+
+  logger.debug( now() + ' ' + str );
+
+} 
+
+
+module.exports.e = function( str ) {
+
+  logger.error( now() + ' ' + str );
+
+} 
+
+
+function now() {
+
+  return Date();
+
+}
