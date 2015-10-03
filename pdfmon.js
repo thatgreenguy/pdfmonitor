@@ -1,6 +1,7 @@
-var odb = require( './common/odb.js' ),
-  log = require( './common/logger.js' ),
+var log = require( './common/logger.js' ),
   ondeath = require( 'death' )({ uncaughtException: true }),
+  odb = require( './common/odb.js' ),
+  pdfprocessqueue = require( './pdfprocessqueue.js' ),
   poolRetryInterval = 15000,
   pollInterval = 2000,
   dbp = null;
@@ -18,9 +19,6 @@ function startUp() {
 
   log.i();
   log.i( '----- DLINK JDE PDF Queue Monitoring starting' ); 
-
-  // Listen for terminate and execute a controlled exit if and when necessary
-  // process.on( 'SIGTERM', controlledExit );
 
   // Handle process exit from DOCKER STOP, system interrupts, uncaughtexceptions or CTRL-C 
   ondeath( exitControlled );
@@ -52,17 +50,35 @@ function processPool( err, pool ) {
 
     log.v( 'Oracle DB connection pool established' );
     dbp = pool;
-    pollJdePdfQueue( dbp );
+
+pdfprocessqueue.getLatestQueueEntry( dbp, processLatestQueueEntry );
+
+//    pollJdePdfQueue( dbp );
     
   }
 
 }
 
+function processLatestQueueEntry( err, result ) {
+
+  if ( err ) {
+
+    log.e( 'Unable to get Latest processed PDF' + err );
+
+  } else {
+
+  log.d( 'Latest Queue Entry was: ' + result );
+  
+  }
+
+}
+
+
+
 // Begin the monitoring process which will run continuosly
 function pollJdePdfQueue( dbp ) {
 
-  log.v( 'Polling...' );
-  log.d( dbp ); 
+  queryJdeJobControl
   scheduleNextMonitorProcess( dbp );
 
 }
@@ -82,6 +98,11 @@ function scheduleNextMonitorProcess( dbp ) {
 }
 
 
+
+
+
+// EXIT HANDLING
+//
 // Release any oracle database resources then exit
 function exitControlled( signal, err ) {
 
@@ -94,16 +115,17 @@ function exitControlled( signal, err ) {
     log.e( 'Node process has died or been interrupted - Signal: ' + signal );
     log.e( 'Normally this would be due to DOCKER STOP command or CTRL-C or perhaps a crash' );
     log.e( 'Attempting Cleanup of Oracle DB resources before final exit' );
-
-    if ( dbp ) {
+  }
+  
+  // Release Oracle resources
+  if ( dbp ) {
 
       odb.terminatePool( dbp, exitProcess );
 
-    } else {
+  } else {
 
-      exitProcess();
+    exitProcess();
 
-    }
   }
 
 }

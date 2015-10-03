@@ -15,47 +15,33 @@ var oracledb = require( 'oracledb' ),
   poolTimeout = 0;
 
 
-// - Values
-//
-module.exports.poolMax;
-module.exports.poolMin;
-module.exports.poolIncrement;
-module.exports.poolTimeout;
-
-
-// - Initialisation
-//
-
-
-
 // - Functions
 //
 // createPool
 // terminatePool
 // getConnection
 // releaseConnection
-// performInsert
-// performDelete
-// performSelect
+// performSQL
 // closeSelectResult
 
 //
 // Create a connection Pool.
 module.exports.createPool = function( cb ) {
 
+
   oracledb.createPool( credentials, function( err, pool ) {
 
     if ( err ) {
  
-      log.error( 'createPool: FAILED: to create a new oracle DB connection Pool' );
-      log.error( err );
-      cb( err, null );      
+      log.e( 'createPool: FAILED: to create a new oracle DB connection Pool' );
+      log.e( err );
+      return cb( err, null );      
 
     } else {
 
-      log.debug( 'createPool: OK' );
-      log.debug( pool );
-      cb( null, pool );      
+      log.d( 'createPool: OK' );
+      log.d( pool );
+      return cb( null, pool );      
 
     }
   });
@@ -70,14 +56,14 @@ module.exports.terminatePool = function( pool, cb ) {
 
     if ( err ) {
 
-      log.error( 'terminatePool: FAILED: to terminate the passed connection pool' );
-      log.error( err );
-      cb( err );
+      log.e( 'terminatePool: FAILED: to terminate the passed connection pool' );
+      log.e( err );
+      return cb( err );
 
     } else {
 
-      log.debug( 'terminatePool: OK' );
-      cb( null );
+      log.d( 'terminatePool: OK' );
+      return cb( null );
 
     }
   });
@@ -92,14 +78,14 @@ module.exports.getConnection = function( pool, cb ) {
 
     if ( err ) {
 
-      log.verbose( 'getConnection: FAILED: to get a Connection from the passed Pool' );
-      log.error( err );
-      cb( err, null );
+      log.v( 'getConnection: FAILED: to get a Connection from the passed Pool' );
+      log.e( err );
+      return cb( err , null );
  
     } else {
 
-      log.debug( 'getConnection: OK' );
-      cb( null, connection ); 
+      log.d( 'getConnection: OK' );
+      return cb( null, connection ); 
 
     }
   });
@@ -114,14 +100,14 @@ module.exports.releaseConnection = function( connection, cb ) {
 
     if ( err ) {
 
-      log.error( 'releaseConnection: FAILED: to release connection' );
-      log.error( err );
-      cb( err, null );
+      log.e( 'releaseConnection: FAILED: to release connection' );
+      log.e( err );
+      return cb( err, null );
 
     } else {
 
-      log.debug( 'releaseConnection: OK' );
-      cb( null ); 
+      log.d( 'releaseConnection: OK' );
+      return cb( null ); 
 
     }
   });
@@ -132,20 +118,22 @@ module.exports.releaseConnection = function( connection, cb ) {
 // Perform an adhoc SQL query Statement.
 module.exports.performSQL = function( connection, query, binds, options, cb ) {
 
-  log.debug( 'performSQL: ' + query );
+  var executeQuery = null;
 
-  connection.execute( queryStatement, binds, options, function( err, result ) {
+  log.d( 'performSQL: ' + query );
+
+  connection.execute( query, binds, options, function( err, result ) {
 
     if ( err ) {
 
-      log.warn( 'performSQL FAILED : ' );
-      log.error( err );
-      cb( err, null );  
+      log.w( 'performSQL FAILED : ' );
+      log.e( err );
+      return cb( err, null );  
 
     } else {
 
-      log.debug( 'performSQL: OK' );
-      cb( null, result ); 
+      log.d( 'performSQL: OK' );
+      return cb( null, result ); 
 
     }
   });
@@ -153,25 +141,24 @@ module.exports.performSQL = function( connection, query, binds, options, cb ) {
 
 
 
-
 //
 // Perform a select query statement.
 module.exports.performSelect = function( connection, cb ) {
 
-  log.debug( 'performSelect: ' + sql );
+  log.d( 'performSelect: ' + sql );
 
   connection.execute( sql, binds, options, function( err, rs ) {
 
     if ( err ) {
 
-      log.warn( 'performSelect: FAILED : ' );
-      log.error( err );
-      cb( err, null );  
+      log.w( 'performSelect: FAILED : ' );
+      log.e( err );
+      return cb( err, null );  
 
     } else {
 
-      log.debug( 'performSelect: OK' );
-      cb( null, result ); 
+      log.d( 'performSelect: OK' );
+      return cb( null, result ); 
 
     }
   });
@@ -186,14 +173,14 @@ module.exports.closeSelectSet = function( connection, rs, cb ) {
 
     if ( err ) {
 
-      log.error( 'closeSelectSet: FAILED : ' );
-      log.error( err );
-      module.exports.releaseConnection( connection, cb );
+      log.e( 'closeSelectSet: FAILED : ' );
+      log.e( err );
+      return module.exports.releaseConnection( connection, cb );
 
     } else {
 
-      log.debug( 'closeSelectSet: OK ' );
-      cb( null );
+      log.d( 'closeSelectSet: OK ' );
+      return cb( null );
 
     }
   });
