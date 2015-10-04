@@ -38,13 +38,22 @@ module.exports.stream = {
     }
 };
 
+
+// Simply handles logging DEBUG messages prepending timestamp
+module.exports.d = function( str ) {
+
+  logger.debug( now() + ' ' + str );
+
+} 
+
+// Simply handles logging INFO messages prepending timestamp
 module.exports.i = function( str ) {
 
   logger.info( now() + ' ' + str );
 
 } 
 
-
+// Simply handles logging VERBOSE messages prepending timestamp
 module.exports.v = function( str ) {
 
   logger.verbose( now() + ' ' + str );
@@ -52,20 +61,22 @@ module.exports.v = function( str ) {
 } 
 
 
-module.exports.d = function( str ) {
+// Simply handles logging WARN messages prepending timestamp
+module.exports.w = function( str ) {
 
-  logger.debug( now() + ' ' + str );
+  logger.warn( now() + ' ' + str );
 
 } 
 
 
+// Simply handles logging ERROR messages prepending timestamp
 module.exports.e = function( str ) {
 
   logger.error( now() + ' ' + str );
 
 } 
 
-
+// Return Timestamp for console message display
 function now() {
 
   return Date();

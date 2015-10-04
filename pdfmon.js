@@ -4,7 +4,9 @@ var log = require( './common/logger.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
   poolRetryInterval = 15000,
   pollInterval = 2000,
-  dbp = null;
+  dbp = null,
+  monitorFromDate = null,
+  monitorFromTime = null;
 
 
 startUp();
@@ -17,7 +19,7 @@ startUp();
 // Do any startup / initialisation stuff
 function startUp() {
 
-  log.i();
+  log.i( '' );
   log.i( '----- DLINK JDE PDF Queue Monitoring starting' ); 
 
   // Handle process exit from DOCKER STOP, system interrupts, uncaughtexceptions or CTRL-C 
@@ -51,34 +53,67 @@ function processPool( err, pool ) {
     log.v( 'Oracle DB connection pool established' );
     dbp = pool;
 
-pdfprocessqueue.getLatestQueueEntry( dbp, processLatestQueueEntry );
-
-//    pollJdePdfQueue( dbp );
+    determineMonitorStartDateTime( dbp );
     
   }
 
 }
 
-function processLatestQueueEntry( err, result ) {
 
-  if ( err ) {
+// Monitoring should start from date and time of last entry to JDE Dlink Post PDF Handling Queue
+// or Enterprise Server current System Date and Time - if the queue is empty (cleared down)
+function determineMonitorStartDateTime( dbp ) {
 
-    log.e( 'Unable to get Latest processed PDF' + err );
+  // Only need to determine the Monitor From Date and Time first time this process runs
+  // so if Monitor From Date and Time already set just continue on to Poll check step
+  if ( monitorFromDate && monitorFromTime ) {
+
+    pollJdePdfQueue( dbp ); 
 
   } else {
 
-  log.d( 'Latest Queue Entry was: ' + result );
-  
+    pdfprocessqueue.getLatestQueueEntry( dbp, 
+    function( err, result ) {
+
+      if ( err ) {
+
+        // Unable to determine Monitor Data and Time from Last Processed Monitored PDF entry so fallback
+        // to current Oracle DB System Date and Time (AIX Date/Time)
+        pdfprocessqueue.getEnterpriseServerSystemDateTime( dbp, 
+        function( err, result ) {
+
+          if ( err ) {
+
+            log.d( 'Unable to determine Monitor start/date time from usual Oracle DB queries will wait and retry' );
+            scheduleNextMonitorProcess( dbp );
+
+          } else {
+
+            // Unable to find entry in F559811 so use Oracle System Date/Time to start Monitoring from
+            log.i( 'Monitoring will start from current Enterprise Server Date and Time: ' + result );
+            pollJdePdfQueue( dbp );
+
+          }
+        });
+
+      } else {
+
+        // Found latest entry in F559811 JDE Post PDF Handling Process Queue - so start monitoring from there
+        log.i( 'Monitoring will start from last PDF entry: ' + result );
+        pollJdePdfQueue( dbp );
+
+      }
+    });
   }
 
 }
 
 
-
-// Begin the monitoring process which will run continuosly
+// Begin the monitoring process which will run continuously until server restart or docker stop issued
 function pollJdePdfQueue( dbp ) {
 
-  queryJdeJobControl
+  log.v( 'Begin Polled Check of JDE PDF Output Queue for new entries since: ' + monitorFromDate + ' ' + monitorFromTime );
+  //  queryJdeJobControl
   scheduleNextMonitorProcess( dbp );
 
 }
