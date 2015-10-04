@@ -10,21 +10,28 @@ var log = require( './common/logger.js' ),
   lastJdeJob = null;
 
 
-startUp();
+startMonitorProcess();
 
 
 // Functions
 //
+// startMonitorProcess() 
+// establishPool() 
+// processPool( err, pool ) 
+// determineMonitorStartDateTime( dbp ) 
+// pollJdePdfQueue( dbp ) 
+// scheduleNextMonitorProcess( dbp ) 
+// endMonitorProcess( signal, err ) 
 //
 
 // Do any startup / initialisation stuff
-function startUp() {
+function startMonitorProcess() {
 
   log.i( '' );
   log.i( '----- DLINK JDE PDF Queue Monitoring starting' ); 
 
   // Handle process exit from DOCKER STOP, system interrupts, uncaughtexceptions or CTRL-C 
-  ondeath( exitControlled );
+  ondeath( endMonitorProcess );
 
   // First need to establish an oracle DB connection pool to work with
   establishPool();
@@ -147,47 +154,54 @@ function scheduleNextMonitorProcess( dbp ) {
 }
 
 
-
-
-
 // EXIT HANDLING
 //
 // Release any oracle database resources then exit
-function exitControlled( signal, err ) {
+// Note: DOCKER STOP or CTRL-C is not considered a failed process so node exits with 0
+// An uncaught exception is considered a program crash so exists with code = 1
+// If an error is returned when attempting to release Oracle connection pool resources exit with error code = 2
+function endMonitorProcess( signal, err ) {
+
+  var exitCode = 0; 
 
   if ( err ) {
    
     log.e( 'Received error from ondeath?' + err ); 
+
+    process.exit( 1 );
 
   } else {
 
     log.e( 'Node process has died or been interrupted - Signal: ' + signal );
     log.e( 'Normally this would be due to DOCKER STOP command or CTRL-C or perhaps a crash' );
     log.e( 'Attempting Cleanup of Oracle DB resources before final exit' );
+
+    // Release Oracle resources
+    if ( dbp ) {
+
+      odb.terminatePool( dbp, 
+      function( err ) {
+
+        if ( err ) {
+
+          dbp = null;
+          process.exit( 2 );
+
+        } else {
+
+          process.exit( 0 );
+
+        }
+      });
+
+    } else {
+
+      dbp = null;
+      process.exit( 0 );
+
+    }
   }
-  
-  // Release Oracle resources
-  if ( dbp ) {
-
-      odb.terminatePool( dbp, exitProcess );
-
-  } else {
-
-    exitProcess();
-
-  }
-
 }
-
-
-function exitProcess() {
-
-  dbp = null;
-  process.exit();
-
-}
-
-
 
 
 
