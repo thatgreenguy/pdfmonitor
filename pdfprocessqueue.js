@@ -24,7 +24,7 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
     cn = null;
 
   response.error = null;
-  response.data = null;
+  response.result = null;
 
   
   // Ensure Oracle resources released before handing response back to caller
@@ -46,7 +46,7 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
          log.d( ' Response Result: ' + response.result );
          log.d( 'Connection released back to Pool' );
 
-         return cb( response.error, response.data ); 
+         return cb( response.error, response.result ); 
 
         }
       });    
@@ -141,7 +141,7 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
     cn = null;
 
   response.error = null;
-  response.data = null;
+  response.result = null;
 
   
   // Ensure Oracle resources released before handing response back to caller
@@ -163,7 +163,7 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
          log.d( ' Response Result: ' + response.result );
          log.d( 'Connection released back to Pool' );
 
-         return cb( response.error, response.data ); 
+         return cb( response.error, response.result ); 
 
         }
       });    

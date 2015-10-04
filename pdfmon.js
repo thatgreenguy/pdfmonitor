@@ -6,7 +6,8 @@ var log = require( './common/logger.js' ),
   pollInterval = 2000,
   dbp = null,
   monitorFromDate = null,
-  monitorFromTime = null;
+  monitorFromTime = null,
+  lastJdeJob = null;
 
 
 startUp();
@@ -64,6 +65,8 @@ function processPool( err, pool ) {
 // or Enterprise Server current System Date and Time - if the queue is empty (cleared down)
 function determineMonitorStartDateTime( dbp ) {
 
+  var workDateTime;
+
   // Only need to determine the Monitor From Date and Time first time this process runs
   // so if Monitor From Date and Time already set just continue on to Poll check step
   if ( monitorFromDate && monitorFromTime ) {
@@ -85,12 +88,15 @@ function determineMonitorStartDateTime( dbp ) {
           if ( err ) {
 
             log.d( 'Unable to determine Monitor start/date time from usual Oracle DB queries will wait and retry' );
+            log.d( err );
+
             scheduleNextMonitorProcess( dbp );
 
           } else {
 
-            // Unable to find entry in F559811 so use Oracle System Date/Time to start Monitoring from
+            // Unable to find Last entry in F559811 so use Oracle System Date/Time to start Monitoring from
             log.i( 'Monitoring will start from current Enterprise Server Date and Time: ' + result );
+            
             pollJdePdfQueue( dbp );
 
           }
@@ -100,6 +106,13 @@ function determineMonitorStartDateTime( dbp ) {
 
         // Found latest entry in F559811 JDE Post PDF Handling Process Queue - so start monitoring from there
         log.i( 'Monitoring will start from last PDF entry: ' + result );
+        
+        // Track last PDF procesed and its last Activity Date and Time i.e. when the UBE Job finished
+        lastJdeJob = result[ 0 ];
+        workDateTime = result[ 1 ].split(' ');
+        monitorFromDate = workDateTime[ 0 ];
+        monitorFromTime = workDateTime[ 1 ];
+
         pollJdePdfQueue( dbp );
 
       }
@@ -112,7 +125,8 @@ function determineMonitorStartDateTime( dbp ) {
 // Begin the monitoring process which will run continuously until server restart or docker stop issued
 function pollJdePdfQueue( dbp ) {
 
-  log.v( 'Begin Polled Check of JDE PDF Output Queue for new entries since: ' + monitorFromDate + ' ' + monitorFromTime );
+  log.v( 'Last JDE Job was ' + lastJdeJob + '- now checking from ' + monitorFromDate + ' ' + monitorFromTime );
+
   //  queryJdeJobControl
   scheduleNextMonitorProcess( dbp );
 
@@ -123,7 +137,7 @@ function scheduleNextMonitorProcess( dbp ) {
 
   var cb;
 
-  log.v( 'Next check in : ' + pollInterval );
+  log.d( 'Next check in : ' + pollInterval + ' milliseconds' );
  
   cb = function() { pollJdePdfQueue( dbp ) };
  
