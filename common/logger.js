@@ -10,6 +10,9 @@ var winston = require('winston');
 
 winston.emitErrs = true;
 
+var loglevel = process.env.LOG_LEVEL;
+if ( typeof( loglevel ) === 'undefined' ) loglevel = 'debug'
+
 var logger = new winston.Logger({
     transports: [
         new winston.transports.File({
@@ -22,7 +25,7 @@ var logger = new winston.Logger({
             colorize: false 
         }),
         new winston.transports.Console({
-            level: 'debug',
+            level: loglevel,
             handleExceptions: true,
             json: false,
             colorize: true

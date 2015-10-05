@@ -27,12 +27,13 @@ var  moment = require( 'moment' ),
 
 // Grab a connection from the Pool, query the database for the latest Queue entry
 // release the connection back to the pool and finally return to caller with date/time of last entry
-module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, cb ) {
+module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, lastJdeJob, cb ) {
 
   var response = {},
     cn = null,
     checkStarted,
-    checkFinished;
+    checkFinished,
+    duration;
 
   checkStarted = new Date();
   response.error = null;
@@ -50,6 +51,9 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
 
     if ( cn ) {
 
+checkFinished = new Date();
+log.w( 'OKAY here is the connection release ' + checkFinished );
+
       odb.releaseConnection( cn, function( err, result ) {
  
         if ( err ) {
@@ -59,12 +63,19 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
 
         } else {
 
-          log.d( ' Response Error: ' + response.error );
-          log.d( ' Response Result: ' + response.result );
+          log.d( ' Response Error: ' + response.error + ' and Result: ' + response.result );
           log.d( 'Connection released back to Pool' );
 
           checkFinished = new Date();
-          log.verbose( 'End Check: ' + checkFinished + ' took: ' + ( checkFinished - checkStarted ) + ' milliseconds' );
+          duration = checkFinished - checkStarted;
+          if ( duration > 500 ) {
+
+          log.warn( '>>>>>>>>>>>>>>>>' );
+          log.warn( '>>>>>>>>>>>>>>>> Took longer than usual!!!!' );
+          log.warn( '>>>>>>>>>>>>>>>>' );
+
+          }
+          log.info( 'End Check: ' + checkFinished + ' took: ' + duration + ' milliseconds' );
 
           return cb( response.error, response.result ); 
 
@@ -105,8 +116,7 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
 
       log.d( 'Check Date is : ' + monitorFromDate + ' Current (AIX) JDE Date is ' + jdeTodayAix );
 
-//pjgtest switched chk
-      if ( monitorFromDate !== jdeTodayAix ) {
+      if ( monitorFromDate == jdeTodayAix ) {
 
         // On startup where startup is Today or whilst monitoring and no Date change yet
         // simply look for Job Control entries greater than or equal to monitorFromDate and monitorFromTime
@@ -124,14 +134,11 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
         // and check for records on both sides of the date change
 
         query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
-        query += " WHERE ( ";
-        query += " jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate = " + monitorFromDate + ' AND jcacttime >= ' + monitorFromTime;
+        query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' "
+        query += " AND (( jcactdate = " + monitorFromDate + " AND jcacttime >= " + monitorFromTime + ") ";
+        query += " OR ( jcactdate > " + monitorFromDate + " )) ";
         query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
-        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' )"
-        query += " ) OR ( ";
-        query += " jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate > " + monitorFromDate;
-        query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
-        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' ) )";
+        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' ) ";
         query += " ORDER BY jcactdate, jcacttime";
   
       }
@@ -176,11 +183,26 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
 
         } else if ( rows.length > 0 ) {
 
-          log.d( 'New JDE Job Control entry found ...' );
+          // The query will pick up the lastJdePdf processed along with any newer entries
+          // so check this entry - if it matches the lastJdePdf inserted ignore it and read the next one
+          // Otherwise attempt to add to the F559811 Queue 
 
-          icb = function() { processResult( null, rs ); }
+          if ( lastJdeJob == rows[ 0 ][ 0 ] ) {
 
-          pdfprocessqueue.addNewJdeJobToQueue( dbp, rows[ 0 ], icb  );
+            log.d( 'This JDE Job already processed - ignore it : ' + rows[ 0 ][ 0 ] );
+ 
+            processResult( null, rs ); 
+
+          } else {
+
+            log.d( 'Add this new JDE Job to the F559811 Process Queue : ' + rows[ 0 ][ 0 ] );
+
+            icb = function() { processResult( null, rs ); }
+            pdfprocessqueue.addNewJdeJobToQueue( dbp, rows[ 0 ], icb  );
+
+          }
+
+
 
         }   
       });

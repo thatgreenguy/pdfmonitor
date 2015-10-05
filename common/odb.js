@@ -9,10 +9,10 @@
 var oracledb = require( 'oracledb' ),
   log = require( './logger' ),
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
-  poolMax = 4,
-  poolMin = 0,
+  poolMax = 5,
+  poolMin = 2,
   poolIncrement = 1,
-  poolTimeout = 0;
+  poolTimeout = 30;
 
 
 // - Functions

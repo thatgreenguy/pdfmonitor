@@ -5,14 +5,13 @@ var log = require( './common/logger.js' ),
   audit = require( './common/audit.js' ),
   pdfchecker = require( './pdfchecker.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
-  poolRetryInterval = 60000,
-  pollInterval = 2000,
+  poolRetryInterval = 30000,
+  pollInterval = 5000,
   dbp = null,
   monitorFromDate = null,
   monitorFromTime = null,
   lastJdeJob = null,
-  timeOffset = 0,
-  stateMode = 'STARTUP';
+  timeOffset = 0;
 
 
 startMonitorProcess();
@@ -174,7 +173,7 @@ function pollJdePdfQueue( dbp ) {
   log.v( 'Last JDE Job was ' + lastJdeJob + ' - Checking from ' + monitorFromDate + ' ' + monitorFromTime );
 
   cb = function() { scheduleNextMonitorProcess( dbp ) }; 
-  pdfchecker.queryJdeJobControl( dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, cb );
+  pdfchecker.queryJdeJobControl( dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, lastJdeJob, cb );
   
 }
 
@@ -185,8 +184,8 @@ function scheduleNextMonitorProcess( dbp ) {
 
   log.d( 'Next check in : ' + pollInterval + ' milliseconds' );
  
-  stateMode = 'MONITOR';
-  cb = function() { pollJdePdfQueue( dbp ) };
+//  cb = function() { pollJdePdfQueue( dbp ) };
+  cb = function() { calculateTimeOffset( dbp ) }; 
    
   setTimeout( cb, pollInterval );    
  
