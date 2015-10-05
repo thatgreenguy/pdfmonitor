@@ -1,13 +1,18 @@
 var log = require( './common/logger.js' ),
   ondeath = require( 'death' )({ uncaughtException: true }),
+  moment = require( 'moment' ),
   odb = require( './common/odb.js' ),
+  audit = require( './common/audit.js' ),
+  pdfchecker = require( './pdfchecker.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
-  poolRetryInterval = 15000,
+  poolRetryInterval = 60000,
   pollInterval = 2000,
   dbp = null,
   monitorFromDate = null,
   monitorFromTime = null,
-  lastJdeJob = null;
+  lastJdeJob = null,
+  timeOffset = 0,
+  stateMode = 'STARTUP';
 
 
 startMonitorProcess();
@@ -18,6 +23,7 @@ startMonitorProcess();
 // startMonitorProcess() 
 // establishPool() 
 // processPool( err, pool ) 
+// calculateTimeOffset( dbp ) 
 // determineMonitorStartDateTime( dbp ) 
 // pollJdePdfQueue( dbp ) 
 // scheduleNextMonitorProcess( dbp ) 
@@ -61,81 +67,122 @@ function processPool( err, pool ) {
     log.v( 'Oracle DB connection pool established' );
     dbp = pool;
 
-    determineMonitorStartDateTime( dbp );
+    calculateTimeOffset( dbp );
     
   }
 
 }
 
 
-// Monitoring should start from date and time of last entry to JDE Dlink Post PDF Handling Queue
-// or Enterprise Server current System Date and Time - if the queue is empty (cleared down)
-function determineMonitorStartDateTime( dbp ) {
+// Calculate the time offset between Oracle DB Host (AIX) and this application host (CENTOS)
+function calculateTimeOffset( dbp ) {
+
+  var currentDateTime,
+    centosMoment,
+    aixMoment;
+
+  pdfprocessqueue.getEnterpriseServerSystemDateTime( dbp, 
+  function( err, result ) {
+
+    if ( err ) {
+
+      log.e( 'Unable to determine System Date and Time from Oracle DB Host' + err );
+      unexpectedDatabaseError( err );
+
+    } else {
+
+      // We should have Date and Time returned in format YYYY-MM-DD HH:MM:SS
+      currentDateTime = new Date();
+      centosMoment = moment();
+      aixMoment = moment( result[ 0 ] );
+      timeOffset = centosMoment - aixMoment;
+
+      log.d( 'CENTOS ' + centosMoment.format() );
+      log.d( 'AIX ' + aixMoment.format() );
+      log.d( moment.duration( centosMoment - aixMoment ).humanize() );
+
+      if ( centosMoment > aixMoment ) {
+     
+        timeOffset = 0 - timeOffset;
+
+      } 
+
+      log.info( 'Oracle Database Host Date and Time is : ' + result );
+      log.info( 'Application Host Date and Time is : ' + currentDateTime );
+      log.info( 'Calculated Time Offset between hosts is : ' + timeOffset + ' milliseconds' +
+                ' or approx ' + moment.duration( centosMoment - aixMoment ).humanize() );
+
+      determineMonitorStartDateTime( dbp, centosMoment, aixMoment );
+ 
+    }
+  });
+
+}
+
+
+// We have Current System Date and Time from Oracle DB Host set and any time offset value we need to consider
+// Check the F559811 DLINK Post PDF Handling Queue table for last processed entry - if found we need to check from
+// this Date and Time to handle recovery if application has been down for a while - if not found will simply
+// start monitoring from current System Date and Time passed thru...
+function determineMonitorStartDateTime( dbp, centosMoment, aixMoment ) {
 
   var workDateTime;
 
-  // Only need to determine the Monitor From Date and Time first time this process runs
-  // so if Monitor From Date and Time already set just continue on to Poll check step
-  if ( monitorFromDate && monitorFromTime ) {
+  // On start up look at last processed entry and if found start monitoring from there.
 
-    pollJdePdfQueue( dbp ); 
-
-  } else {
-
-    pdfprocessqueue.getLatestQueueEntry( dbp, 
-    function( err, result ) {
+    pdfprocessqueue.getLatestQueueEntry( dbp, function( err, result ) {
 
       if ( err ) {
 
-        // Unable to determine Monitor Data and Time from Last Processed Monitored PDF entry so fallback
-        // to current Oracle DB System Date and Time (AIX Date/Time)
-        pdfprocessqueue.getEnterpriseServerSystemDateTime( dbp, 
-        function( err, result ) {
-
-          if ( err ) {
-
-            log.d( 'Unable to determine Monitor start/date time from usual Oracle DB queries will wait and retry' );
-            log.d( err );
-
-            scheduleNextMonitorProcess( dbp );
-
-          } else {
-
-            // Unable to find Last entry in F559811 so use Oracle System Date/Time to start Monitoring from
-            log.i( 'Monitoring will start from current Enterprise Server Date and Time: ' + result );
-            
-            pollJdePdfQueue( dbp );
-
-          }
-        });
+        log.e( 'Unable to access the F559811 for last processed entry' + err );
+        unexpectedDatabaseError( err );
 
       } else {
 
+        // If table Empty then use System Date and Time from Oracle Host to begin Monitoring
+        if ( result === null ) {
+
+          lastJdeJob = 'unknown'; 
+          monitorFromDate = audit.getJdeJulianDateFromMoment( aixMoment );
+          monitorFromTime = aixMoment.format( 'HH:mm:ss' );
+
+        } else {
+
+          // Track last PDF procesed and its last Activity Date and Time i.e. when the UBE Job finished
+          lastJdeJob = result[ 0 ];
+          workDateTime = result[ 1 ].split(' ');
+          monitorFromDate = workDateTime[ 0 ];
+          monitorFromTime = workDateTime[ 1 ];
+
+        }
+
         // Found latest entry in F559811 JDE Post PDF Handling Process Queue - so start monitoring from there
-        log.i( 'Monitoring will start from last PDF entry: ' + result );
-        
-        // Track last PDF procesed and its last Activity Date and Time i.e. when the UBE Job finished
-        lastJdeJob = result[ 0 ];
-        workDateTime = result[ 1 ].split(' ');
-        monitorFromDate = workDateTime[ 0 ];
-        monitorFromTime = workDateTime[ 1 ];
+        log.i( 'Begin Monitoring from : ' + monitorFromDate + ' ' + monitorFromTime );     
 
         pollJdePdfQueue( dbp );
 
       }
     });
-  }
-
 }
 
 
 // Begin the monitoring process which will run continuously until server restart or docker stop issued
 function pollJdePdfQueue( dbp ) {
 
-  log.v( 'Last JDE Job was ' + lastJdeJob + '- now checking from ' + monitorFromDate + ' ' + monitorFromTime );
+  // if ( monitorFromDate && monitorFromTime ) {
+
+  log.v( 'Last JDE Job was ' + lastJdeJob + ' - Checking from ' + monitorFromDate + ' ' + monitorFromTime );
+  
+  pdfchecker.queryJdeJobControl( dbp, monitorFromDate, monitorFromTime, pollInterval, 
+                                 lastJdeJob, stateMode, timeOffset, scheduleNextMonitorProcess );
+  
+
+
+// quit dont loop yet!!!!!!
+releaseOracleResources();    
 
   //  queryJdeJobControl
-  scheduleNextMonitorProcess( dbp );
+  //scheduleNextMonitorProcess( dbp );
 
 }
 
@@ -146,62 +193,90 @@ function scheduleNextMonitorProcess( dbp ) {
 
   log.d( 'Next check in : ' + pollInterval + ' milliseconds' );
  
+  stateMode = 'MONITOR';
   cb = function() { pollJdePdfQueue( dbp ) };
- 
+   
   setTimeout( cb, pollInterval );    
  
 
 }
 
 
+// Database error handling
+// Call this whe unexpected DB error encountered
+function unexpectedDatabaseError( err ) {
+
+  log.e( 'Unexpected Database error - unsure how to recover from this so exiting now!' + err );
+  releaseOracleResources( 1 ); 
+
+}
+
+
 // EXIT HANDLING
 //
-// Release any oracle database resources then exit
-// Note: DOCKER STOP or CTRL-C is not considered a failed process so node exits with 0
+// Note: DOCKER STOP or CTRL-C is not considered a failed process - just a way to stop this application - so node exits with 0
 // An uncaught exception is considered a program crash so exists with code = 1
-// If an error is returned when attempting to release Oracle connection pool resources exit with error code = 2
 function endMonitorProcess( signal, err ) {
-
-  var exitCode = 0; 
 
   if ( err ) {
    
     log.e( 'Received error from ondeath?' + err ); 
 
-    process.exit( 1 );
+    releaseOracleResources( 2 ); 
+
 
   } else {
 
     log.e( 'Node process has died or been interrupted - Signal: ' + signal );
     log.e( 'Normally this would be due to DOCKER STOP command or CTRL-C or perhaps a crash' );
     log.e( 'Attempting Cleanup of Oracle DB resources before final exit' );
+  
+    releaseOracleResources( 0 ); 
 
-    // Release Oracle resources
-    if ( dbp ) {
-
-      odb.terminatePool( dbp, 
-      function( err ) {
-
-        if ( err ) {
-
-          dbp = null;
-          process.exit( 2 );
-
-        } else {
-
-          process.exit( 0 );
-
-        }
-      });
-
-    } else {
-
-      dbp = null;
-      process.exit( 0 );
-
-    }
   }
+
 }
 
 
+// Check to see if database pool is valid and if so attempt to release Oracle DB resources back to the Database
+// This function can be called from endMonitorProcess or if a database related error is detected
+// If unable to release resources cleanly application will exit with non-zero code (connections not released correctly?) 
+function releaseOracleResources( suggestedExitCode ) {
 
+  log.e( 'Problem detected so attempting to release Oracle DB resources' );
+  log.e( 'Application may exit or wait briefly and attempt recovery' );
+
+  // If no exit code passed in default it to exit with 0
+  if ( typeof( suggestedExitCode ) === 'undefined' ) { suggestedExitCode = 0 } 
+
+  // Release Oracle resources
+  if ( dbp ) {
+
+    odb.terminatePool( dbp, function( err ) {
+
+      if ( err ) {
+
+        log.d( 'Failed to release Oracle DB Connection Pool resources: ' + err );
+
+        dbp = null;
+        process.exit( 2 );
+
+      } else {
+
+        log.d( 'Oracle DB Connection Pool resources released successfully: ' );
+
+        process.exit( suggestedExitCode );
+
+      }
+    });
+
+  } else {
+
+    log.d( 'No Oracle DB Connection Pool to release: ' );
+
+    dbp = null;
+    process.exit( suggestedExitCode );
+
+  }
+
+}

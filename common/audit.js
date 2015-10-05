@@ -92,6 +92,14 @@ exports.createTimestamp = function( dt, dateSep, timeSep, padChar ) {
 }
 
 
+// Convert moment to JDE Julian style date
+exports.getJdeJulianDateFromMoment = function( m ) {
+
+  return exports.getJdeJulianDate( m.toDate() );
+
+}
+
+
 // Converts date to JDE Julian style date i.e. CYYDDD
 exports.getJdeJulianDate = function( dt ) {
 

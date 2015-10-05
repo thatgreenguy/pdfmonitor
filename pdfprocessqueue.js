@@ -107,7 +107,7 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
 
           log.w( 'No records found JDE process Queue is empty' );
 
-          response.result = 'System Date and Time';
+          response.result = null;
           releaseReturn();
 
         } else if ( rows.length > 0 ) {
@@ -132,7 +132,7 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
 // Get the current System Time from the Oracle database host.
 // Note: Unable to simply use this application host date and time because the AIX time is out of sync with all other servers
 // Generally all servers are kept synchronised with NTP across DLINK but the JDE Enterprise server (AIX) is not and is 
-// currently running approx 3.5 minutes SLOW! Have requested Infrastructure to address this issue preferably via install of NTP
+// currently running approx 3 minutes SLOW! Have requested Infrastructure to address this issue preferably via install of NTP
 // on AIX...
 // Grab Oracle DB System Time in a format we can easily use, release the connection back to the pool then return to caller with result
 module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
@@ -189,7 +189,8 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
       // Make returned connection available to other functions
       cn = connection;
 
-      query = 'SELECT TO_CHAR (SYSDATE, "YYYY-MM-DD HH24:MI:SS") "NOW" FROM DUAL';
+      query = 'SELECT TO_CHAR(SYSDATE, ';
+      query += "'" + 'YYYY-MM-DD HH24:MI:SS' + "'" + ') "NOW" FROM DUAL ';
 
       odb.performSQL( cn, query, binds, options, processResult );
 

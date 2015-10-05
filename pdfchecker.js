@@ -11,9 +11,9 @@
 // New PDF files are cross checked against JDE email configuration and if some kind of post pdf processing is required
 // e.g. Logos or mailing then the Jde Job is added to the F559811 DLINK Post PDF Handling Queue
 
-
-var oracledb = require( 'oracledb' ),
+var  moment = require( 'moment' ),
   log = require( './common/logger.js' ),
+  odb = require( './common/odb.js' ),
   audit = require( './common/audit.js' ),
   numRows = 1,
   begin = null;
@@ -21,27 +21,64 @@ var oracledb = require( 'oracledb' ),
 
 // Functions -
 //
-// module.exports.queryJdeJobControl( dbCn, chkDate, chkTime, pollInterval, hostname, lastPdf, performPolledProcess )
-// function processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, performPolledProcess )
-// function processPdfEntry( dbCn, rsF556110, begin, jobControlRecord, pollInterval, hostname, lastPdf, performPolledProcess )
-// function oracleResultsetClose( dbCn, rs )
-// function oracledbCnRelease( dbCn )
-
 
 // Query the JDE Job Control Master file to fetch all PDF files generated since last audit entry
 // Only select PDF jobs that are registered for emailing
-module.exports.queryJdeJobControl = function(  dbCn, chkDate, chkTime, pollInterval, hostname, lastPdf, performPolledProcess ) {
+module.exports.queryJdeJobControl = function(  dbCn, monitorFromDate, monitorFromTime, pollInterval, hostname,
+                                               lastPdf, timeOffset, cb ) {
 
-  var auditTimestamp,
-  query,
-  result,
-  jdeDate,
-  jdeTime,
-  jdeDateToday,
-  wkAdt;
+  var query,
+    currentMomentAix,
+    jdeTodayAix,
+    jdeNextDayAix;
 
-  begin = new Date();
-  log.debug( 'Begin Checking : ' + begin + ' - Looking for new Jde Pdf files since last run' );
+  // We have monitorFromDate to build the JDE Job Control checking query, however, we need to also account for 
+  // application startups that are potentially checking from a few days ago plus we need to account for when we 
+  // repeatedly monitoring (normal running mode) and we cross the midnight threshold and experience a Date change
+
+  // Check the passed Monitor From Date to see if it is TODAY or not use AIX Time not CENTOS
+  currentMomentAix = moment().subtract( timeOffset); 
+  jdeTodayAix = audit.getJdeJulianDateFromMoment( currentMomentAix );
+  jdeNextDayAix = 
+
+  log.d( 'Check Date is : ' + chkDate + ' Current (AIX) JDE Date is ' + currentJDE);
+
+  // Determine if constructing a query in start up mode or normal monitoring mode 
+  if ( monitorFromDate == jdeTodayAix ) {
+
+    // On startup where startup is Today or whilst monitoring and no Date change yet
+    // simply look for Job Control entries greater than or equal to monitorFromDate and monitorFromTime
+     
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
+    query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= ";
+    query += chkDate + ' AND jcacttime >= ' + chkTime;
+    query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
+    query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' )";
+    query += " ORDER BY jcactdate, jcacttime";
+
+  else {
+
+    // Otherwise Startup was before Today or we have crossed Midnight into a new day so query needs to adjust
+    // and check for records on chkdate after chktime OR entries after chkDateNext
+
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
+    query += " WHERE ( ";
+    query += " jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= " + chkDate + ' AND jcacttime >= ' + chkTime;
+    query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
+    query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' )"
+    query += " ) OR ( ";
+    query += " jcjobsts = 'D' AND jcfuno = 'UBE' AND jcactdate >= " + currentJdeDate;
+    query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
+    query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' ) )";
+    query += " ORDER BY jcactdate, jcacttime";
+
+
+
+
+  }
+
+
+
 
   // Checking of JDE Database Job Control is driven by passed Date and Time.
   // On startup where process has not run for a while this date and time could be from several days ago.
@@ -179,27 +216,4 @@ function processPdfEntry( dbCn, rsF556110, begin, record, pollInterval, hostname
   // Process subsequent PDF entries if any - Read next Job Control record
   processResultsFromF556110( dbCn, rsF556110, numRows, begin, pollInterval, hostname, lastPdf, chkDate, chkTime, sleepThenRepeat );
 
-}
-
-
-// Close Oracle database result set
-function oracleResultsetClose( dbCn, rs ) {
-
-  rs.close( function( err ) {
-    if ( err ) {
-      log.error( "Error closing dbCn: " + err.message );
-      oracledbCnRelease(); 
-    }
-  }); 
-}
-
-
-// Close Oracle database dbCn
-function oracledbCnRelease( dbCn ) {
-
-  dbCn.release( function ( err ) {
-    if ( err ) {
-      log.error( "Error closing dbCn: " + err.message );
-    }
-  });
 }
