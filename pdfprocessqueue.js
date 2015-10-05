@@ -9,7 +9,9 @@
 
 var log = require( './common/logger.js' ),
   odb = require( './common/odb.js' ),
-  jdeDB = process.env.JDEDB;
+  audit = require( './common/audit.js' ),
+  jdeDB = process.env.JDEDB,
+  hostname = process.env.HOSTNAME;
 
 
 // Functions -
@@ -236,6 +238,108 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
 
         }   
       });
+    }
+  }
+
+
+  // Get a pooled connection, check the Jde PDF process Queue, cleanup and return
+  odb.getConnection( pool, processConnection );
+
+}
+
+
+// When a new JDE Job is detected that is registered for Post PDF Handling call this function to insert an entry into 
+// the F559811 DLINK Post PDF Handling Queue - this custom table acts as process audit and repository of any status driven
+// post PDF handling required - currently Logo stamping and Emailing
+// Get Oracle connection from Pool, insert new entry, release connection back to pool then return with result
+module.exports.addNewJdeJobToQueue = function( pool, row,  cb ) {
+
+  var response = {},
+    cn = null;
+
+  response.error = null;
+  response.result = null;
+
+  
+  // Ensure Oracle resources released before handing response back to caller
+  function releaseReturn() {
+
+    if ( cn ) {
+
+      odb.releaseConnection( cn, function( err, result ) {
+ 
+        if ( err ) {
+
+          log.e( 'Failed to release Oracle Connection back to Pool' );
+          return cb( err );
+
+        } else {
+
+         log.d( 'Response Error: ' + response.error );
+         log.d( 'Response Result: ' + response.result );
+         log.d( 'Connection released back to Pool' );
+
+         return cb( response.error, response.result ); 
+
+        }
+      });    
+    }
+  }  
+
+
+  function processConnection( err, connection ) {
+
+    var query = null,
+      binds = [],
+      options = { autoCommit: true };
+
+    if ( err ) {
+
+      log.e( 'Failed to get a connection' );
+      log.e( err );
+      
+      return cb( err );
+
+    } else {
+
+      // Make returned connection available to other functions
+      cn = connection;
+
+      query = ' INSERT INTO testdta.F559811 VALUES (:jpfndfuf2, :jpsawlatm, :jpactivid, :jpyexpst, :jpblkk, :jppid, :jpjobn, :jpuser, :jpupmj, :jpupmt )  ';
+      binds.push( row[ 0 ] );
+      binds.push( audit.createTimestamp() );
+      binds.push( hostname );
+      binds.push( '100' );
+      binds.push( row[ 1 ] + ' ' + row[ 2 ] );
+      binds.push( 'PDFMONITOR' );
+      binds.push( 'CENTOS' );
+      binds.push( 'DOCKER' );
+      binds.push( row[ 1 ] );
+      binds.push( row[ 2 ] );
+
+      odb.performSQL( cn, query, binds, options, processResult );
+
+    }
+  }
+
+  function processResult( err, row ) {
+
+    if ( err ) {
+
+      log.e( 'INSERT to F559811 Failed' );
+      log.e( err );
+
+      response.error = err;
+      response.result = null;
+      releaseReturn();
+
+    } else {
+
+      log.d( 'Looks like we the Oracle DB host System Date and Time: ' + row[ 0 ] ); 
+  
+      response.result = row;
+      releaseReturn();
+
     }
   }
 

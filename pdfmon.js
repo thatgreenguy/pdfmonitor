@@ -169,21 +169,13 @@ function determineMonitorStartDateTime( dbp, centosMoment, aixMoment ) {
 // Begin the monitoring process which will run continuously until server restart or docker stop issued
 function pollJdePdfQueue( dbp ) {
 
-  // if ( monitorFromDate && monitorFromTime ) {
+  var cb;
 
   log.v( 'Last JDE Job was ' + lastJdeJob + ' - Checking from ' + monitorFromDate + ' ' + monitorFromTime );
+
+  cb = function() { scheduleNextMonitorProcess( dbp ) }; 
+  pdfchecker.queryJdeJobControl( dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, cb );
   
-  pdfchecker.queryJdeJobControl( dbp, monitorFromDate, monitorFromTime, pollInterval, 
-                                 lastJdeJob, stateMode, timeOffset, scheduleNextMonitorProcess );
-  
-
-
-// quit dont loop yet!!!!!!
-releaseOracleResources();    
-
-  //  queryJdeJobControl
-  //scheduleNextMonitorProcess( dbp );
-
 }
 
 

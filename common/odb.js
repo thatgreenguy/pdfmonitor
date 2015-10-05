@@ -121,6 +121,8 @@ module.exports.performSQL = function( connection, query, binds, options, cb ) {
   var executeQuery = null;
 
   log.d( 'performSQL: ' + query );
+  log.d( 'performSQL: ' + binds );
+  log.d( 'performSQL: ' + options );
 
   connection.execute( query, binds, options, function( err, result ) {
 
