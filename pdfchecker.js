@@ -11,14 +11,13 @@
 // New PDF files are cross checked against JDE email configuration and if some kind of post pdf processing is required
 // e.g. Logos or mailing then the Jde Job is added to the F559811 DLINK Post PDF Handling Queue
 
-var  moment = require( 'moment' ),
+var moment = require( 'moment' ),
+  async = require( 'async' ),
   log = require( './common/logger.js' ),
   odb = require( './common/odb.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
-  audit = require( './common/audit.js' ),
-  numRows = 1,
-  begin = null;
-
+  audit = require( './common/audit.js' );
+  
 
 // Functions -
 //
@@ -30,183 +29,160 @@ var  moment = require( 'moment' ),
 module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, lastJdeJob, cb ) {
 
   var response = {},
-    cn = null,
-    checkStarted,
-    checkFinished,
-    duration;
+  cn = null,
+  checkStarted,
+  checkFinished,
+  duration,
+  query,
+  binds = [],
+  options = { resultSet: true },
+  asyncQ;
 
-  checkStarted = new Date();
   response.error = null;
   response.result = null;
+  checkStarted = new Date();
 
+
+  asyncQ = async.queue( function ( row , cb ) {
+   
+   log.v( 'Jde Job ' + row + ' scheduled for processing ' ); 
+ 
+   pdfprocessqueue.processNewJdeJobToQueue( dbp, row[ 0 ], function( err, results ) {
+
+     if ( err ) {
+
+       log.w( 'JDE Job ' + row[ 0 ] + ' processing Failed: ' + err );
+       log.w( 'Going back on Queue for another attempt' );
+       
+
+     } else {
+
+       log.i( 'JDE Job ' + row[ 0 ] + ' PROCESSED OK: ' + results.toString() );
+
+     }
+   });
+    
+   return cb();
+
+  }, 4 );
+
+  query = constructQuery( monitorFromDate, monitorFromTime, timeOffset );
 
   log.d( 'Check Started: ' + checkStarted );
 
-  // Grab a connection then query the F556110 JDE Job Control table, process any new entries tidy up and return
-  odb.getConnection( dbp, processConnection );
 
+  odb.getConnection( dbp, function( err, dbc ) {
 
-  // Ensure Oracle resources released before handing response back to caller
-  function releaseReturn() {
+    if ( err ) throw err;
 
-    if ( cn ) {
+    dbc.execute( query, binds, options, function( err, results ) {
 
-checkFinished = new Date();
-log.w( 'OKAY here is the connection release ' + checkFinished );
+      var rowCount = 0;
+      if ( err ) throw err;   
 
-      odb.releaseConnection( cn, function( err, result ) {
- 
-        if ( err ) {
+      function processResultSet() {
 
-          log.e( 'Failed to release Oracle Connection back to Pool' );
-          return cb( err );
+        results.resultSet.getRow( function( err, row ) {
 
-        } else {
+          if ( err ) throw err;
+          if ( row ) {
 
-          log.d( ' Response Error: ' + response.error + ' and Result: ' + response.result );
-          log.d( 'Connection released back to Pool' );
+            log.i( 'Push this row to Queue: ' + row );
 
-          checkFinished = new Date();
-          duration = checkFinished - checkStarted;
-          if ( duration > 500 ) {
+            // Stick this row onto the Queue to process asynchronously without breaking DB connection limit
+            asyncQ.push( [ row ] );
+            rowCount += 1;
 
-          log.warn( '>>>>>>>>>>>>>>>>' );
-          log.warn( '>>>>>>>>>>>>>>>> Took longer than usual!!!!' );
-          log.warn( '>>>>>>>>>>>>>>>>' );
+            processResultSet(); 
+
+            return;
 
           }
-          log.info( 'End Check: ' + checkFinished + ' took: ' + duration + ' milliseconds' );
 
-          return cb( response.error, response.result ); 
+          log.d( 'F556110 Entries processed: ' + rowCount );
+          checkFinished = new Date();
+          log.d( 'Check Finished: ' + checkFinished + ' took ' + (checkFinished - checkStarted) + ' milliseconds' );
 
-        }
-      });    
-    }
-  }  
+          results.resultSet.close( function( err ) { 
+          if ( err ) log.d( 'Error closing F556110 result set: ' + err );
+
+            dbc.release( function( err ) {
+            if ( err ) log.d( 'Error releasing F556110 Connection: ' + err );
+
+            // Once connection release can return to continue monitoring
+            return cb( null, dbp );
+
+            });
+          });
+        });
+      }
+
+      processResultSet();
+
+    });
+  });
+}
 
 
-  function processConnection( err, connection ) {
+// Perform processing on each row
 
-    var query = null,
-      binds = [],
-      options = { resultSet: true },
+//          if ( lastJdeJob == rows[ 0 ][ 0 ] ) {
+//            log.d( 'This JDE Job already processed - ignore it : ' + rows[ 0 ][ 0 ] );
+//            processResult( null, rs ); 
+//         } else {
+//            log.d( 'Add this new JDE Job to the F559811 Process Queue : ' + rows[ 0 ][ 0 ] );
+//            icb = function() { processResult( null, rs ); }
+//            pdfprocessqueue.addNewJdeJobToQueue( dbp, rows[ 0 ], icb  );
+//          }
+
+
+// Construct query which is suitable for monitor from date and time and considering
+// change of day on both startup and crossing midnight boundary
+function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
+
+  var query = null,
       currentMomentAix,
       jdeTodayAix;
 
-    if ( err ) {
+  // We have monitorFromDate to build the JDE Job Control checking query, however, we need to also account for 
+  // application startups that are potentially checking from a few days ago plus we need to account for when we are 
+  // repeatedly monitoring (normal running mode) and we cross the midnight threshold and experience a Date change
 
-      log.e( 'Failed to get a connection' );
-      log.e( err );
+  // Check the passed Monitor From Date to see if it is TODAY or not - use AIX Time not CENTOS
+  currentMomentAix = moment().subtract( timeOffset); 
+  jdeTodayAix = audit.getJdeJulianDateFromMoment( currentMomentAix );
 
-      response.error = err;
-      releaseReturn();
-      
-    } else {
+  log.d( 'Check Date is : ' + monitorFromDate + ' Current (AIX) JDE Date is ' + jdeTodayAix );
 
-      // Make returned connection available to other functions
-      cn = connection;
+  if ( monitorFromDate == jdeTodayAix ) {
 
-      // We have monitorFromDate to build the JDE Job Control checking query, however, we need to also account for 
-      // application startups that are potentially checking from a few days ago plus we need to account for when we are 
-      // repeatedly monitoring (normal running mode) and we cross the midnight threshold and experience a Date change
-
-      // Check the passed Monitor From Date to see if it is TODAY or not - use AIX Time not CENTOS
-      currentMomentAix = moment().subtract( timeOffset); 
-      jdeTodayAix = audit.getJdeJulianDateFromMoment( currentMomentAix );
-
-      log.d( 'Check Date is : ' + monitorFromDate + ' Current (AIX) JDE Date is ' + jdeTodayAix );
-
-      if ( monitorFromDate == jdeTodayAix ) {
-
-        // On startup where startup is Today or whilst monitoring and no Date change yet
-        // simply look for Job Control entries greater than or equal to monitorFromDate and monitorFromTime
+    // On startup where startup is Today or whilst monitoring and no Date change yet
+    // simply look for Job Control entries greater than or equal to monitorFromDate and monitorFromTime
      
-        query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
-        query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' "
-        query += " AND jcactdate = " + monitorFromDate + ' AND jcacttime >= ' + monitorFromTime;
-        query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
-        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' )";
-        query += " ORDER BY jcactdate, jcacttime";
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
+    query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' "
+    query += " AND jcactdate = " + monitorFromDate + ' AND jcacttime >= ' + monitorFromTime;
+    query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
+    query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' )";
+    query += " ORDER BY jcactdate, jcacttime";
 
-      } else {
+  } else {
 
-        // Otherwise Startup was before Today or we have crossed Midnight into a new day so query needs to adjust
-        // and check for records on both sides of the date change
+    // Otherwise Startup was before Today or we have crossed Midnight into a new day so query needs to adjust
+    // and check for records on both sides of the date change
 
-        query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
-        query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' "
-        query += " AND (( jcactdate = " + monitorFromDate + " AND jcacttime >= " + monitorFromTime + ") ";
-        query += " OR ( jcactdate > " + monitorFromDate + " )) ";
-        query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
-        query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' ) ";
-        query += " ORDER BY jcactdate, jcacttime";
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
+    query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' "
+    query += " AND (( jcactdate = " + monitorFromDate + " AND jcacttime >= " + monitorFromTime + ") ";
+    query += " OR ( jcactdate > " + monitorFromDate + " )) ";
+    query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
+    query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' ) ";
+    query += " ORDER BY jcactdate, jcacttime";
   
-      }
-
-      odb.performSQL( cn, query, binds, options, processResult );
-
-    }
   }
 
-  function processResult( err, rs ) {
+  log.d( query );
 
-    var icb,
-      data = {};
- 
-    if ( err ) {
-
-      log.e( 'Error detected performing Select query on JDE Job Control table' );
-      log.e( err );
-
-      response.error = err;
-      response.result = null;
-      releaseReturn();
-
-    } else {
-
-      rs.resultSet.getRows( 1, function( err, rows ) {
-
-        if ( err ) {
-
-          log.e( 'Failed to get Row from resultset' );
-          log.e( err );
-
-          response.error = err;
-          releaseReturn();
-
-        } else if ( rows.length == 0 ) {
-
-          log.d( 'Finished processing JDE Job Control table no more records' );
-
-          response.result = null;
-          releaseReturn();
-
-        } else if ( rows.length > 0 ) {
-
-          // The query will pick up the lastJdePdf processed along with any newer entries
-          // so check this entry - if it matches the lastJdePdf inserted ignore it and read the next one
-          // Otherwise attempt to add to the F559811 Queue 
-
-          if ( lastJdeJob == rows[ 0 ][ 0 ] ) {
-
-            log.d( 'This JDE Job already processed - ignore it : ' + rows[ 0 ][ 0 ] );
- 
-            processResult( null, rs ); 
-
-          } else {
-
-            log.d( 'Add this new JDE Job to the F559811 Process Queue : ' + rows[ 0 ][ 0 ] );
-
-            icb = function() { processResult( null, rs ); }
-            pdfprocessqueue.addNewJdeJobToQueue( dbp, rows[ 0 ], icb  );
-
-          }
-
-
-
-        }   
-      });
-    }
-  }
+  return query;
 
 }

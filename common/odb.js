@@ -9,10 +9,10 @@
 var oracledb = require( 'oracledb' ),
   log = require( './logger' ),
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
-  poolMax = 5,
-  poolMin = 2,
+  poolMax = 15,
+  poolMin = 5,
   poolIncrement = 1,
-  poolTimeout = 30;
+  poolTimeout = 60;
 
 
 // - Functions
@@ -80,7 +80,7 @@ module.exports.getConnection = function( pool, cb ) {
 
       log.v( 'getConnection: FAILED: to get a Connection from the passed Pool' );
       log.e( err );
-      return cb( err , null );
+      return cb( err );
  
     } else {
 
@@ -171,7 +171,7 @@ module.exports.performSelect = function( connection, cb ) {
 // Close the passed selection result set.
 module.exports.closeSelectSet = function( connection, rs, cb ) {
 
-  rs.close( function( err ) {
+  rs.resultSet.close( function( err ) {
 
     if ( err ) {
 

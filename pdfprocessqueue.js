@@ -56,6 +56,25 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
   }  
 
 
+  function closeResultSet( rs ) {
+
+    odb.closeSelectSet( cn, rs, function( err ) {
+
+      if ( err ) {
+
+        log.e( 'FAILED to close result set' + err );
+        releaseReturn();            
+
+      } else {
+
+        log.d( 'Result Set closed now release connection' );
+        releaseReturn();            
+
+      }
+    });
+  }
+
+
   function processConnection( err, connection ) {
 
     var query = null,
@@ -103,21 +122,21 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
           log.e( err );
 
           response.error = err;
-          releaseReturn();
+          closeResultSet( rs );
 
         } else if ( rows.length == 0 ) {
 
           log.w( 'No records found JDE process Queue is empty' );
 
           response.result = null;
-          releaseReturn();
+          closeResultSet( rs );
 
         } else if ( rows.length > 0 ) {
 
           log.d( 'We have latest processed entry from queue: ' + rows[ 0 ] ); 
   
           response.result = rows[ 0 ];
-          releaseReturn();
+          closeResultSet( rs );
 
         }   
       });
@@ -173,6 +192,25 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
   }  
 
 
+  function closeResultSet( rs ) {
+
+    odb.closeSelectSet( cn, rs, function( err ) {
+
+      if ( err ) {
+
+        log.e( 'FAILED to close result set' + err );
+        releaseReturn();            
+
+      } else {
+
+        log.d( 'Result Set closed now release connection' );
+        releaseReturn();            
+
+      }
+    });
+  }
+
+
   function processConnection( err, connection ) {
 
     var query = null,
@@ -220,21 +258,21 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
           log.e( err );
 
           response.error = err;
-          releaseReturn();
+          closeResultSet( rs );
 
         } else if ( rows.length == 0 ) {
 
           log.w( 'No records returned from SYSTEM Date and Time query to Oracle' );
 
           response.err = new Error( 'Failed to get System Date and Time from Oracle Host' );
-          releaseReturn();
+          closeResultSet( rs );
 
         } else if ( rows.length > 0 ) {
 
           log.d( 'Looks like we the Oracle DB host System Date and Time: ' + rows[ 0 ] ); 
   
           response.result = rows[ 0 ];
-          releaseReturn();
+          closeResultSet( rs );
 
         }   
       });
@@ -246,6 +284,53 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
   odb.getConnection( pool, processConnection );
 
 }
+
+
+// When a new Jde Job is detected by the monitor process it needs to be added to the Queue for further processing
+// This function first checks whether the Job has already been added and if not adds it.
+// Note: This check is necessary as there may be more than one instance of the monitor process running (redundancy)
+module.exports.processNewJdeJobToQueue = function( pool, jdeJobName, cb ) {
+
+  var query,
+    binds = [],
+    options = { maxRows: 1 },
+    dbc;
+
+  query = "SELECT COUNT(*) FROM testdta.F559811 WHERE jpfndfuf2 = ";
+  query += "'" + jdeJobName + "'"
+  odb.getConnection( pool, function( err, dbc ) {
+
+    if ( err ) {
+
+      return cb( err );
+ 
+    } else {
+
+      dbc.execute( query, binds, options, function( err, results ) {
+
+        if ( err ) {
+
+          return cb( err );
+
+        } else {
+
+          log.v( 'Result is ::: ' + results );
+
+          dbc.release( function( err ) { 
+
+            if ( err ) log.d( ' Error releasing connection for count query ' + err );
+
+            // Once connection released return
+            return cb( null, results );
+
+          });
+        }
+      });
+    }
+  });
+
+}
+
 
 
 // When a new JDE Job is detected that is registered for Post PDF Handling call this function to insert an entry into 

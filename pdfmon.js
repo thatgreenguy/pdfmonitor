@@ -143,7 +143,7 @@ function determineMonitorStartDateTime( dbp, centosMoment, aixMoment ) {
 
           lastJdeJob = 'unknown'; 
           monitorFromDate = audit.getJdeJulianDateFromMoment( aixMoment );
-          monitorFromTime = aixMoment.format( 'HH:mm:ss' );
+          monitorFromTime = aixMoment.format( 'HHmmss' );
 
         } else {
 
@@ -169,6 +169,9 @@ function determineMonitorStartDateTime( dbp, centosMoment, aixMoment ) {
 function pollJdePdfQueue( dbp ) {
 
   var cb;
+
+  // TESTING
+  monitorFromDate = 115278;
 
   log.v( 'Last JDE Job was ' + lastJdeJob + ' - Checking from ' + monitorFromDate + ' ' + monitorFromTime );
 
