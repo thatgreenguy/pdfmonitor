@@ -77,7 +77,7 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
 
           if ( rows.length ) {
             
-            processRows( dbp, rows );
+            processRows( dbp, rows, lastJdeJob );
 
             // Process subsequent block of records
             processResultSet(); 
@@ -114,20 +114,57 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
 
 
 // Process block of rows - need to check and insert each row into F559811 JDE PDF Process Queue
-function processRows ( dbp, rows ) { 
+function processRows ( dbp, rows, lastJdeJob ) { 
 
   if ( rows.length ) {
 
     rows.forEach( function( row ) {
 
-      // Hand over this row to be added to the F559811 
-      // No callback if the Select Check/Insert combination fails it will be picked up again and retried on 
-      // a later run!
-      pdfprocessqueue.processNewJdeJobToQueue( dbp, row )
+      // If the current row is the last Jde Job successully processed into the F559811 then we do not need to 
+      // process that one again.
+      if ( lastJdeJob == row[ 0 ] ) {
 
-    });    
+        log.d( 'Ignoring ' + lastJdeJob + row[ 0 ] + ' as processed in previous run' );
+
+      } else {
+
+        // Hand over this row to be added to the F559811 
+        // No callback if the Select Check/Insert combination fails it will be picked up again and retried on 
+        // a later run!
+        pdfprocessqueue.addJobToProcessQueue( dbp, row, function( err, result ) {
+ 
+          if ( err ) {
+
+            rowFailure( dbp, row, err, result );
+
+          } else { 
+
+            rowSuccess( dbp, row, err, result );
+
+          }
+        });   
+      }
+    });
   }
 }
+
+
+function rowFailure( dbp, row, err, result ) {
+
+  log.i( row + ' Process Row Failed - Should we retry?' );
+  log.i( row + ' : ' + result );
+
+
+}
+
+
+function rowSuccess( dbp, row, err, result ) {
+
+  log.i( row + ' Done ' );
+  log.i( row + ' : ' + result );
+
+}
+
 
 
 // Perform processing on each row

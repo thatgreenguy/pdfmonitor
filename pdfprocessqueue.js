@@ -39,14 +39,12 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
  
         if ( err ) {
 
-          log.e( 'Failed to release Oracle Connection back to Pool' );
+          log.e( 'Failed to release Oracle Connection back to Pool' + err );
           return cb( err );
 
         } else {
 
-         log.d( ' Response Error: ' + response.error );
-         log.d( ' Response Result: ' + response.result );
-         log.d( 'Connection released back to Pool' );
+         log.d( ' Response : Error: ' + response.error + ' Result: ' + response.result );
 
          return cb( response.error, response.result ); 
 
@@ -126,7 +124,7 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
 
         } else if ( rows.length == 0 ) {
 
-          log.w( 'No records found JDE process Queue is empty' );
+          log.i( 'No records found in JDE process Queue table has been cleared / is empty' );
 
           response.result = null;
           closeResultSet( rs );
@@ -180,10 +178,7 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
 
         } else {
 
-         log.d( ' Response Error: ' + response.error );
-         log.d( ' Response Result: ' + response.result );
-         log.d( 'Connection released back to Pool' );
-
+         log.d( ' Response Error: ' + response.error + ' Result: ' + response.result );
          return cb( response.error, response.result ); 
 
         }
@@ -198,12 +193,10 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
 
       if ( err ) {
 
-        log.e( 'FAILED to close result set' + err );
         releaseReturn();            
 
       } else {
 
-        log.d( 'Result Set closed now release connection' );
         releaseReturn();            
 
       }
@@ -279,33 +272,39 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
     }
   }
 
-
   // Get a pooled connection, check the Jde PDF process Queue, cleanup and return
   odb.getConnection( pool, processConnection );
 
 }
 
 
-// This function accepts a new Jde PDF Job and adds it to the F559811 JDE PDF Process Queue
-// Where it will be picked up by the Logo / and or Email PDF handler programs for further processing
-//
-// Note: Usually this monitor process will be finding 1 or 2 entries on any given run but occasionally - say on startup
-// after the application has been offline for some time there could be many multiple JDE PDF entries to be processed.
-// As Oracle DB Connections are a limited resource and when processing lots of entries very quickly the connection pool 
-// could be busy - so if no connection is available immediately the function simply schedules itself to run again on the next tick
-// of the event loop (after I/O not before!) 
-module.exports.processNewJdeJobToQueue = function( pool, row ) {
+// Add new JDE Job entry to F559811 JDE PDF Process Queue table
+module.exports.addJobToProcessQueue = function( pool, row, cb ) {
 
-  var query,
-    binds = [],
-    options = { maxRows: 1 },
-    dbc,
-    selectResult,
+  var dbc,
     jdeJobName = row[ 0 ];
+
+  log.i( 'ATTEMPT INSERT with ROW : ' + row );
+
+  odb.getConnection( pool, function( err, cn ) {
+
+    if ( err ) {
+
+      // Can't get a connection from the Pool right now so return with error
+      return cb ( err );
+
+    } else {
+
+      dbc = cn;
+
+      insertEntry();
+
+    }
+  });
 
 
   // Handle Insertion of new Jde Pdf Job to F559811 Jde Pdf Process Queue
-  function insertEntry( dbc ) {
+  function insertEntry( ) {
 
   var query,
     binds = [],
@@ -324,102 +323,36 @@ module.exports.processNewJdeJobToQueue = function( pool, row ) {
     binds.push( row[ 2 ] );
 
     // Insert entry into the F559811 DLINK Post PDF Handling Queue
-    odb.performSQL( dbc, query, binds, options, function( err, row ) {
+    odb.performSQL( dbc, query, binds, options, function( err, result ) {
 
       if ( err ) {
-
-        log.w( row[ 0 ] + ' FAILED INSERT to F559811 process queue' + err );
-
-        // releaseReturn();
+      
+        result = jdeJobName + ' INSERT FAILED ' + err;
 
       } else {
 
-        log.v( row[ 0 ] + ' INSERTED to F559811 process Queue' );
-  
+        result = jdeJobName + ' INSERTED' ;
+
       }
-    });
-  }
 
+      log.w( result );
 
-  // Release connection back to pool
-  function releaseConnection( dbc ) { 
-    
-    dbc.release( function( err ) {
-    
-      if ( err ) {
+      // Error or not need to release the connection before returning
+      odb.releaseConnection( dbc, function( err ) {
 
-        log.d( 'Error releasing connection back to pool ' + err );
-    
-      }
-    });
-  }
+        if ( err ) {
 
+          return cb( err );
 
-  // Close query result set 
-  function closeResultSet( dbc, rs ) {
-
-    odb.closeSelectSet( dbc, rs, function( err ) { 
-
-      if ( err ) {
-       
-        log.e( 'Error closing result set in processNewJdeJobToQueue' + err );
-      }
-    });
-  }
-
-
-  // Get a connection check entry not already in process queue then add it
-  odb.getConnection( pool, function( err, dbc ) {
-
-    if ( err ) {
-
-      // If failed to get a connection - most likely pooled connections are all in use so 
-      // retry shortly on next tick of event loop (after I/O)
-      log.v( 'No Pool DB Connections available - retry again shortly' ); 
-
-      // ----------- for now just return!!!
-      return;
- 
-    } else {
-
-      // Have connection so check if entry already exists before attempting insert
-      // Only want to see insert errors if genuine - multiple instances of this process could be running
-      // for redundancy so only attempt insert if not already added to process queue
-
-      query = "SELECT COUNT(*) AS checkCount FROM testdta.F559811 WHERE jpfndfuf2 = ";
-      query += "'" + jdeJobName + "'"
-
-      dbc.execute( query, binds, options, function( err, rs ) {
-
-        if ( err ) { 
-
-          log.e( 'Got connection but Query Failed so Abort - will be picked up on next run and retried' );
-      
-          releaseConnection( dbc )
-          return;
- 
         } else {
 
-          // Grab query results then release the result set as no longer required
-          checkCount = rs.row[ 0 ];
-          closeResultSet( dbc, rs );          
+          // Connection released insert can fail if already added so not really an error
+          return cb( null, result );
 
-          // Determine whether we should add this JDE Job to F559811 JDE PDF Process Queue  or not
-          if ( checkCount == '0' ) {
-
-            insertEntry();
-      
-          } else {
-
-            log.d( jdeJobName + ' Already in F559811 Process Queue - Ignored' );
-
-          }
         }
       });
+    });
+  }
 
-    // Whatever happens make sure to release the connection back to the Pool
-    releaseConnection( dbc );     
 
-    }
-  });
 }

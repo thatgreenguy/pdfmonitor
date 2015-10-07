@@ -170,8 +170,9 @@ function pollJdePdfQueue( dbp ) {
 
   var cb;
 
-  // TESTING
-  monitorFromDate = 115278;
+  // TESTING ---------------------------------
+  monitorFromDate = 115280;
+  monitorFromTime = 000000;
 
   log.v( 'Last JDE Job was ' + lastJdeJob + ' - Checking from ' + monitorFromDate + ' ' + monitorFromTime );
 
@@ -181,15 +182,14 @@ function pollJdePdfQueue( dbp ) {
 }
 
 
+// When done processing any new PDF entries this is called to set up the next polled job 
 function scheduleNextMonitorProcess( dbp ) {
 
   var cb;
 
-  log.d( 'Next check in : ' + pollInterval + ' milliseconds' );
- 
-//  cb = function() { pollJdePdfQueue( dbp ) };
+  log.v('');
+
   cb = function() { calculateTimeOffset( dbp ) }; 
-   
   setTimeout( cb, pollInterval );    
  
 
