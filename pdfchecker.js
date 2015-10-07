@@ -12,7 +12,6 @@
 // e.g. Logos or mailing then the Jde Job is added to the F559811 DLINK Post PDF Handling Queue
 
 var moment = require( 'moment' ),
-  async = require( 'async' ),
   log = require( './common/logger.js' ),
   odb = require( './common/odb.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
@@ -35,36 +34,13 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
   duration,
   query,
   binds = [],
-  options = { resultSet: true },
-  asyncQ;
+  rowBlockSize = 10,
+  options = { resultSet: true, prefetchRows: rowBlockSize };
 
   response.error = null;
   response.result = null;
   checkStarted = new Date();
 
-
-  asyncQ = async.queue( function ( row , cb ) {
-   
-   log.v( 'Jde Job ' + row + ' scheduled for processing ' ); 
- 
-   pdfprocessqueue.processNewJdeJobToQueue( dbp, row[ 0 ], function( err, results ) {
-
-     if ( err ) {
-
-       log.w( 'JDE Job ' + row[ 0 ] + ' processing Failed: ' + err );
-       log.w( 'Going back on Queue for another attempt' );
-       
-
-     } else {
-
-       log.i( 'JDE Job ' + row[ 0 ] + ' PROCESSED OK: ' + results.toString() );
-
-     }
-   });
-    
-   return cb();
-
-  }, 4 );
 
   query = constructQuery( monitorFromDate, monitorFromTime, timeOffset );
 
@@ -73,33 +49,44 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
 
   odb.getConnection( dbp, function( err, dbc ) {
 
-    if ( err ) throw err;
+    if ( err ) {
+      log.w( 'Failed to get an Oracle connection to use for F556110 Query Check' );
+      return cb;
+    }
 
     dbc.execute( query, binds, options, function( err, results ) {
 
-      var rowCount = 0;
       if ( err ) throw err;   
 
+      // Recursivly process result set until no more rows
       function processResultSet() {
 
-        results.resultSet.getRow( function( err, row ) {
+        results.resultSet.getRows( rowBlockSize, function( err, rows ) {
 
-          if ( err ) throw err;
-          if ( row ) {
+          if ( err ) {
+            log.w( 'Error encountered trying to query F556110 - release connection and retry ' + err );
+            dbc.release( function( err ) {
 
-            log.i( 'Push this row to Queue: ' + row );
+              log.d( 'Error releasing F556110 Connection: ' + err );
 
-            // Stick this row onto the Queue to process asynchronously without breaking DB connection limit
-            asyncQ.push( [ row ] );
-            rowCount += 1;
+              // Once connection release can return to continue monitoring
+              return cb( null, dbp );
 
+            });
+          }
+
+          if ( rows.length ) {
+            
+            processRows( dbp, rows );
+
+            // Process subsequent block of records
             processResultSet(); 
-
+ 
             return;
 
           }
 
-          log.d( 'F556110 Entries processed: ' + rowCount );
+
           checkFinished = new Date();
           log.d( 'Check Finished: ' + checkFinished + ' took ' + (checkFinished - checkStarted) + ' milliseconds' );
 
@@ -117,10 +104,29 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
         });
       }
 
+      // Process first block of records
       processResultSet();
+
 
     });
   });
+}
+
+
+// Process block of rows - need to check and insert each row into F559811 JDE PDF Process Queue
+function processRows ( dbp, rows ) { 
+
+  if ( rows.length ) {
+
+    rows.forEach( function( row ) {
+
+      // Hand over this row to be added to the F559811 
+      // No callback if the Select Check/Insert combination fails it will be picked up again and retried on 
+      // a later run!
+      pdfprocessqueue.processNewJdeJobToQueue( dbp, row )
+
+    });    
+  }
 }
 
 

@@ -9,10 +9,10 @@
 var oracledb = require( 'oracledb' ),
   log = require( './logger' ),
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
-  poolMax = 15,
-  poolMin = 5,
+  poolMax = 5,
+  poolMin = 2,
   poolIncrement = 1,
-  poolTimeout = 60;
+  poolTimeout = 30;
 
 
 // - Functions
@@ -28,19 +28,16 @@ var oracledb = require( 'oracledb' ),
 // Create a connection Pool.
 module.exports.createPool = function( cb ) {
 
-
   oracledb.createPool( credentials, function( err, pool ) {
 
     if ( err ) {
  
-      log.e( 'createPool: FAILED: to create a new oracle DB connection Pool' );
-      log.e( err );
+      log.e( 'createPool: FAILED: to create a new oracle DB connection Pool' + err );
       return cb( err, null );      
 
     } else {
 
       log.d( 'createPool: OK' );
-      log.d( pool );
       return cb( null, pool );      
 
     }
@@ -56,8 +53,7 @@ module.exports.terminatePool = function( pool, cb ) {
 
     if ( err ) {
 
-      log.e( 'terminatePool: FAILED: to terminate the passed connection pool' );
-      log.e( err );
+      log.e( 'terminatePool: FAILED: to terminate the passed connection pool : ' + err );
       return cb( err );
 
     } else {
@@ -78,8 +74,7 @@ module.exports.getConnection = function( pool, cb ) {
 
     if ( err ) {
 
-      log.v( 'getConnection: FAILED: to get a Connection from the passed Pool' );
-      log.e( err );
+      log.v( 'getConnection: FAILED: to get a Connection from the passed Pool : ' + err );
       return cb( err );
  
     } else {
@@ -100,8 +95,7 @@ module.exports.releaseConnection = function( connection, cb ) {
 
     if ( err ) {
 
-      log.e( 'releaseConnection: FAILED: to release connection' );
-      log.e( err );
+      log.e( 'releaseConnection: FAILED: to release connection : ' + err );
       return cb( err, null );
 
     } else {
@@ -120,46 +114,18 @@ module.exports.performSQL = function( connection, query, binds, options, cb ) {
 
   var executeQuery = null;
 
-  log.d( 'performSQL: ' + query );
-  log.d( 'performSQL: ' + binds );
-  log.d( 'performSQL: ' + options );
-
   connection.execute( query, binds, options, function( err, result ) {
 
     if ( err ) {
 
-      log.w( 'performSQL FAILED : ' );
-      log.e( err );
+      log.e( 'performSQL FAILED : ' + query + ' ERROR: ' + err );
+      log.d( 'performSQL Binds: ' + binds );
+      log.d( 'performSQL Options: ' + options );
       return cb( err, null );  
 
     } else {
 
-      log.d( 'performSQL: OK' );
-      return cb( null, result ); 
-
-    }
-  });
-}
-
-
-
-//
-// Perform a select query statement.
-module.exports.performSelect = function( connection, cb ) {
-
-  log.d( 'performSelect: ' + sql );
-
-  connection.execute( sql, binds, options, function( err, rs ) {
-
-    if ( err ) {
-
-      log.w( 'performSelect: FAILED : ' );
-      log.e( err );
-      return cb( err, null );  
-
-    } else {
-
-      log.d( 'performSelect: OK' );
+      log.d( 'performSQL OK : ' + query );
       return cb( null, result ); 
 
     }
