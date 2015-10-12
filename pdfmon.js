@@ -6,7 +6,7 @@ var log = require( './common/logger.js' ),
   pdfchecker = require( './pdfchecker.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
   poolRetryInterval = 30000,
-  pollInterval = 3000,
+  pollInterval = 450,
   dbp = null,
   monitorFromDate = null,
   monitorFromTime = null,
@@ -171,10 +171,6 @@ function determineMonitorStartDateTime( dbp, centosMoment, aixMoment ) {
 function pollJdePdfQueue( dbp ) {
 
   var cb;
-
-  // TESTING ---------------------------------
-//  monitorFromDate = 115285;
-//  monitorFromTime = 000000;
 
   log.v( 'Last JDE Job was ' + lastJdeJob + ' - Checking from ' + monitorFromDate + ' ' + monitorFromTime );
 
