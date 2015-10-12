@@ -6,13 +6,13 @@ var log = require( './common/logger.js' ),
   pdfchecker = require( './pdfchecker.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
   poolRetryInterval = 30000,
-  pollInterval = 5000,
+  pollInterval = 3000,
   dbp = null,
   monitorFromDate = null,
   monitorFromTime = null,
   lastJdeJob = null,
-  timeOffset = 0;
-
+  timeOffset = 0
+  pollIntervalCheckAdjustment = moment.duration( ( pollInterval * 2 ), 'milliseconds' );
 
 startMonitorProcess();
 
@@ -144,6 +144,7 @@ function determineMonitorStartDateTime( dbp, centosMoment, aixMoment ) {
           lastJdeJob = 'unknown'; 
           monitorFromDate = audit.getJdeJulianDateFromMoment( aixMoment );
           monitorFromTime = aixMoment.format( 'HHmmss' );
+//          monitorFromTime = aixMoment.subtract( pollIntervalCheckAdjustment ).format( 'HHmmss' );
           
 
         } else {
