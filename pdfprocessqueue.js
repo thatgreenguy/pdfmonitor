@@ -92,7 +92,7 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
       // Make returned connection available to other functions
       cn = connection;
  
-      query = 'SELECT jpfndfuf2, jpblkk FROM testdta.F559811 ORDER BY jpsawlatm DESC';
+      query = 'SELECT jpfndfuf2, jpblkk FROM testdta.F559811 ORDER BY jpupmj DESC, jpupmt DESC';
 
       odb.performSQL( cn, query, binds, options, processResult );
 
@@ -279,32 +279,17 @@ module.exports.getEnterpriseServerSystemDateTime = function( pool, cb ) {
 
 
 // Add new JDE Job entry to F559811 JDE PDF Process Queue table
-module.exports.addJobToProcessQueue = function( pool, row, cb ) {
+module.exports.addJobToProcessQueue = function( pool, dbc, row, cb ) {
 
-  var dbc,
-    jdeJobName = row[ 0 ];
+  var jdeJobName = row[ 0 ];
 
   log.i( 'ATTEMPT INSERT with ROW : ' + row );
 
-  odb.getConnection( pool, function( err, cn ) {
-
-    if ( err ) {
-
-      // Can't get a connection from the Pool right now so return with error
-      return cb ( err );
-
-    } else {
-
-      dbc = cn;
-
-      insertEntry();
-
-    }
-  });
+  insertEntry( dbc );
 
 
   // Handle Insertion of new Jde Pdf Job to F559811 Jde Pdf Process Queue
-  function insertEntry( ) {
+  function insertEntry( dbc ) {
 
   var query,
     binds = [],
@@ -336,21 +321,8 @@ module.exports.addJobToProcessQueue = function( pool, row, cb ) {
       }
 
       log.w( result );
+      return cb( null, result );
 
-      // Error or not need to release the connection before returning
-      odb.releaseConnection( dbc, function( err ) {
-
-        if ( err ) {
-
-          return cb( err );
-
-        } else {
-
-          // Connection released insert can fail if already added so not really an error
-          return cb( null, result );
-
-        }
-      });
     });
   }
 

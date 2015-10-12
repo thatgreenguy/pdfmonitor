@@ -12,7 +12,7 @@ var oracledb = require( 'oracledb' ),
   poolMax = 5,
   poolMin = 2,
   poolIncrement = 1,
-  poolTimeout = 30;
+  poolTimeout = 60;
 
 
 // - Functions

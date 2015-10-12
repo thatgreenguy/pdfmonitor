@@ -144,6 +144,7 @@ function determineMonitorStartDateTime( dbp, centosMoment, aixMoment ) {
           lastJdeJob = 'unknown'; 
           monitorFromDate = audit.getJdeJulianDateFromMoment( aixMoment );
           monitorFromTime = aixMoment.format( 'HHmmss' );
+          
 
         } else {
 
@@ -171,13 +172,14 @@ function pollJdePdfQueue( dbp ) {
   var cb;
 
   // TESTING ---------------------------------
-  monitorFromDate = 115280;
-  monitorFromTime = 000000;
+//  monitorFromDate = 115285;
+//  monitorFromTime = 000000;
 
   log.v( 'Last JDE Job was ' + lastJdeJob + ' - Checking from ' + monitorFromDate + ' ' + monitorFromTime );
 
   cb = function() { scheduleNextMonitorProcess( dbp ) }; 
-  pdfchecker.queryJdeJobControl( dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, lastJdeJob, cb );
+  pdfchecker.queryJdeJobControl( dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, 
+    lastJdeJob, cb );
   
 }
 
