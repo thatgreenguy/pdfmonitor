@@ -283,7 +283,7 @@ module.exports.addJobToProcessQueue = function( pool, dbc, row, cb ) {
 
   var jdeJobName = row[ 0 ];
 
-  log.i( 'ATTEMPT INSERT with ROW : ' + row );
+  log.d( 'INSERTING row : ' + row );
 
   insertEntry( dbc );
 
@@ -320,7 +320,7 @@ module.exports.addJobToProcessQueue = function( pool, dbc, row, cb ) {
 
       }
 
-      log.w( result );
+      log.i( result );
       return cb( null, result );
 
     });

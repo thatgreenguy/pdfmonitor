@@ -151,8 +151,8 @@ function processRows ( dbp, dbc, rows, lastJdeJob ) {
 
 function rowFailure( dbp, dbc, row, err, result ) {
 
-  log.i( row + ' Process Row Failed - Should we retry?' );
-  log.i( row + ' : ' + result );
+  log.e( row + ' Process Row Failed - Not sure how to recover report and bail!' );
+  log.e( row + ' : ' + result );
 
 
 }
@@ -160,8 +160,7 @@ function rowFailure( dbp, dbc, row, err, result ) {
 
 function rowSuccess( dbp, dbc, row, err, result ) {
 
-  log.i( row + ' Done ' );
-  log.i( row + ' : ' + result );
+  log.i( row + ' Processed: ' + result );
 
 }
 
