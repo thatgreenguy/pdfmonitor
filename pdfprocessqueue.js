@@ -11,11 +11,16 @@ var log = require( './common/logger.js' ),
   odb = require( './common/odb.js' ),
   audit = require( './common/audit.js' ),
   jdeDB = process.env.JDEDB,
-  hostname = process.env.HOSTNAME;
+  hostname = process.env.HOSTNAME,
+  jdeEnv = process.env.JDE_ENV,
+  jdeEnvDb = process.env.JDE_ENV_DB;
 
 
 // Functions -
 //
+// module.exports.getLatestQueueEntry = function( pool, cb )
+// module.exports.getEnterpriseServerSystemDateTime = function( pool, cb )
+// module.exports.addJobToProcessQueue = function( pool, dbc, row, cb )
 
 
 // Grab a connection from the Pool, query the database for the latest Queue entry
@@ -92,7 +97,7 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
       // Make returned connection available to other functions
       cn = connection;
  
-      query = 'SELECT jpfndfuf2, jpblkk FROM testdta.F559811 ORDER BY jpupmj DESC, jpupmt DESC';
+      query = 'SELECT jpfndfuf2, jpblkk FROM " + jdeEnvDb.trim() + ".F559811 ORDER BY jpupmj DESC, jpupmt DESC';
 
       odb.performSQL( cn, query, binds, options, processResult );
 
@@ -295,7 +300,7 @@ module.exports.addJobToProcessQueue = function( pool, dbc, row, cb ) {
     binds = [],
     options = { autoCommit: true };
 
-    query = ' INSERT INTO testdta.F559811 VALUES (:jpfndfuf2, :jpsawlatm, :jpactivid, :jpyexpst, :jpblkk, :jppid, :jpjobn, :jpuser, :jpupmj, :jpupmt )  ';
+    query = ' INSERT INTO " + jdeEnvDb.trim() + ".F559811 VALUES (:jpfndfuf2, :jpsawlatm, :jpactivid, :jpyexpst, :jpblkk, :jppid, :jpjobn, :jpuser, :jpupmj, :jpupmt )  ';
     binds.push( row[ 0 ] );
     binds.push( audit.createTimestamp() );
     binds.push( hostname );
@@ -325,6 +330,4 @@ module.exports.addJobToProcessQueue = function( pool, dbc, row, cb ) {
 
     });
   }
-
-
 }

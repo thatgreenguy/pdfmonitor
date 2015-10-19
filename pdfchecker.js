@@ -7,20 +7,28 @@
 // --------
 //
 // Called periodically by pdfmonitor.js
-// It checks the Jde Job Control Audit table looking for recently completed UBE reports.
-// New PDF files are cross checked against JDE email configuration and if some kind of post pdf processing is required
-// e.g. Logos or mailing then the Jde Job is added to the F559811 DLINK Post PDF Handling Queue
+// Checks the Jde Job Control table looking for recently completed UBE reports.
+// New PDF files are cross checked against JDE Post PDF handling setup/configuration file in JDE 
+// and if some kind of post pdf processing is required e.g. Logos or Mailing then the Jde Job is added to
+// the F559811 DLINK Post PDF Handling Queue
+
 
 var moment = require( 'moment' ),
   log = require( './common/logger.js' ),
   odb = require( './common/odb.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
-  audit = require( './common/audit.js' );
+  audit = require( './common/audit.js' ),
+  jdeEnv = process.env.JDE_ENV
+  jdeEnvDb = process.env.JDE_ENV_DB;
   
 
 // Functions -
 //
 // module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, cb )
+// function processRows ( dbp, dbc, rows, lastJdeJob )
+// function rowFailure( dbp, dbc, row, err, result ) 
+// function rowSuccess( dbp, dbc, row, err, result ) 
+// function constructQuery( monitorFromDate, monitorFromTime, timeOffset )
 
 
 // Grab a connection from the Pool, query the database for the latest Queue entry
@@ -190,24 +198,24 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
     // On startup where startup is Today or whilst monitoring and no Date change yet
     // simply look for Job Control entries greater than or equal to monitorFromDate and monitorFromTime
      
-    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDb.trim() + ".F556110 ";
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' "
     query += " AND jcactdate = " + monitorFromDate + ' AND jcacttime >= ' + monitorFromTime;
     query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
-    query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' )";
-    query += " ORDER BY jcactdate, jcacttime";
+    query += " ( SELECT RTRIM(crpgm, ' ') FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid = 'PDFMAIL' OR crcfgsid = 'PDFLOGO' )";
+    query += " ORDER BY jcactdate, jcacttime";  
 
   } else {
 
     // Otherwise Startup was before Today or we have crossed Midnight into a new day so query needs to adjust
     // and check for records on both sides of the date change
 
-    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM testdta.F556110 ";
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDb.trim() + ".F556110 ";
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' "
     query += " AND (( jcactdate = " + monitorFromDate + " AND jcacttime >= " + monitorFromTime + ") ";
     query += " OR ( jcactdate > " + monitorFromDate + " )) ";
     query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
-    query += " ( SELECT RTRIM(crpgm, ' ') FROM testdta.F559890 WHERE crcfgsid = 'PDFMAILER' OR crcfgsid = 'PDFHANDLER' ) ";
+    query += " ( SELECT RTRIM(crpgm, ' ') FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid = 'PDFMAIL' OR crcfgsid = 'PDFLOGO' ) ";
     query += " ORDER BY jcactdate, jcacttime";
   
   }
