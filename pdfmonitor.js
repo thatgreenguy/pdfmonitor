@@ -6,13 +6,16 @@ var log = require( './common/logger.js' ),
   pdfchecker = require( './pdfchecker.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
   poolRetryInterval = 30000,
-  pollInterval = 450,
+  pollInterval = process.env.POLLINTERVAL,
   dbp = null,
   monitorFromDate = null,
   monitorFromTime = null,
   lastJdeJob = null,
   timeOffset = 0
-  pollIntervalCheckAdjustment = moment.duration( ( pollInterval * 2 ), 'milliseconds' );
+  pollIntervalCheckAdjustment = moment.duration( ( pollInterval * 2 ), 'milliseconds' ),
+  jdeEnv = process.env.JDE_ENV,
+  jdeEnvDb = process.env.JDE_ENV_DB;
+
 
 startMonitorProcess();
 
@@ -34,6 +37,13 @@ function startMonitorProcess() {
 
   log.i( '' );
   log.i( '----- DLINK JDE PDF Queue Monitoring starting' ); 
+  log.i( '' );
+  log.i( '----- JDE Environment : ' + jdeEnv ); 
+  log.i( '----- JDE Database    : ' + jdeEnvDb ); 
+  log.i( '----- Polling Interval   : ' + pollInterval ); 
+  log.i( '----- Monitor for new PDF files in JDE PrintQueue ' );
+  log.i( '----- and if configured for post Pdf processing stick them into the F559811 JDE PDF Process Queue' ); 
+  log.i( '' );
 
   // Handle process exit from DOCKER STOP, system interrupts, uncaughtexceptions or CTRL-C 
   ondeath( endMonitorProcess );
@@ -267,5 +277,4 @@ function releaseOracleResources( suggestedExitCode ) {
     process.exit( suggestedExitCode );
 
   }
-
 }

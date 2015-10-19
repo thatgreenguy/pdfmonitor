@@ -173,8 +173,6 @@ function rowSuccess( dbp, dbc, row, err, result ) {
 }
 
 
-
-
 // Construct query which is suitable for monitor from date and time and considering
 // change of day on both startup and crossing midnight boundary
 function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
