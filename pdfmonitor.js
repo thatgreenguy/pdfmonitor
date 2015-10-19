@@ -7,12 +7,12 @@ var log = require( './common/logger.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
   poolRetryInterval = 30000,
   pollInterval = process.env.POLLINTERVAL,
+  pollIntervalCheckAdjustment,
   dbp = null,
   monitorFromDate = null,
   monitorFromTime = null,
   lastJdeJob = null,
   timeOffset = 0
-  pollIntervalCheckAdjustment = moment.duration( ( pollInterval * 2 ), 'milliseconds' ),
   jdeEnv = process.env.JDE_ENV,
   jdeEnvDb = process.env.JDE_ENV_DB;
 
@@ -34,6 +34,11 @@ startMonitorProcess();
 
 // Do any startup / initialisation stuff
 function startMonitorProcess() {
+
+  // If poll Interval not supplied via environment variables then default it to 1 second
+  if ( typeof( pollInterval ) === 'undefined' ) pollInterval = 1000;
+
+  pollIntervalCheckAdjustment = moment.duration( ( pollInterval * 2 ), 'milliseconds' ),
 
   log.i( '' );
   log.i( '----- DLINK JDE PDF Queue Monitoring starting' ); 
