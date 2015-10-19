@@ -20,6 +20,7 @@ var moment = require( 'moment' ),
   audit = require( './common/audit.js' ),
   jdeEnv = process.env.JDE_ENV
   jdeEnvDb = process.env.JDE_ENV_DB;
+  jdeEnvDbF556110 = process.env.JDE_ENV_DB_F556110;
   
 
 // Functions -
@@ -214,7 +215,7 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
     // On startup where startup is Today or whilst monitoring and no Date change yet
     // simply look for Job Control entries greater than or equal to monitorFromDate and monitorFromTime
      
-    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDb.trim() + ".F556110 ";
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND jcactdate = " + monitorFromDate + ' AND jcacttime >= ' + monitorFromTime;
     query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
@@ -226,7 +227,7 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
     // Otherwise Startup was before Today or we have crossed Midnight into a new day so query needs to adjust
     // and check for records on both sides of the date change
 
-    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDb.trim() + ".F556110 ";
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND (( jcactdate = " + monitorFromDate + " AND jcacttime >= " + monitorFromTime + ") ";
     query += " OR ( jcactdate > " + monitorFromDate + " )) ";
