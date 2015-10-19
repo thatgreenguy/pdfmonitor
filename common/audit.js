@@ -11,7 +11,9 @@ var oracledb = require( 'oracledb' ),
   log = require( './logger' ),
   moment = require( 'moment' ),
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
-  aixTimeOffset = process.env.AIX_TIME_OFFSET;
+  aixTimeOffset = process.env.AIX_TIME_OFFSET,
+  jdeEnv = process.env.JDE_ENV,
+  jdeEnvDb = process.env.JDE_ENV_DB;
 
 
 // Initialisation
@@ -42,7 +44,7 @@ exports.aixTimeOffset = aixTimeOffset;
 
 
 // Insert new Audit entry into the JDE audit log file.
-exports.createAuditEntry = function( odbCn, pdfjob, genkey, ctrid, status, dbCn ) {
+exports.createAuditEntry = function( odbCn, pdfjob, genkey, ctrid, status, comments, dbCn ) {
 
   var dt,
   timestamp,
@@ -60,11 +62,11 @@ exports.createAuditEntry = function( odbCn, pdfjob, genkey, ctrid, status, dbCn 
   if ( typeof( ctrid ) === 'undefined' ) ctrid = ' ';
   if ( typeof( status ) === 'undefined' ) status = ' ';
 
-  query = "INSERT INTO testdta.F559849 VALUES (:pasawlatm, :pafndfuf2, :pablkk, :paactivid, :padeltastat, :papid, :pajobn, :pauser, :paupmj, :paupmt)";
+  query = "INSERT INTO " + jdeEnvDb.trim() + ".F559849 VALUES (:pasawlatm, :pafndfuf2, :pablkk, :paactivid, :padeltastat, :comments, :papid, :pajobn, :pauser, :paupmj, :paupmt)";
   log.debug( query );
 
   odbCn.execute( query, 
-    [timestamp, pdfjob, genkey, ctrid, status, 'PDFMONITOR', 'CENTOS', 'DOCKER', jdedate, jdetime ],
+    [timestamp, pdfjob, genkey, ctrid, status, comments, 'PDFMONITOR', 'CENTOS', 'DOCKER', jdedate, jdetime ],
     { autoCommit: true }, 
     function( err, rs ) {
 
@@ -175,7 +177,7 @@ exports.determineLastProcessedDateTime = function( err, dbCn, cb ) {
 
   var query = null;
 	
-  query  = "SELECT jpupmj, jpupmt, jpsawlatm, jpfndfuf2, jpblkk FROM testdta.F559811 ";
+  query  = "SELECT jpupmj, jpupmt, jpsawlatm, jpfndfuf2, jpblkk FROM " + jdeEnvDb.trim() + ".F559811 ";
   query += " ORDER BY jpsawlatm DESC";
 
   dbCn.execute( query, [], { resultSet: true }, 
