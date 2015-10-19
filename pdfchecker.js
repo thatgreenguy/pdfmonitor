@@ -179,7 +179,25 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
 
   var query = null,
       currentMomentAix,
-      jdeTodayAix;
+      jdeTodayAix,
+      jdeEnvCheck;
+
+  // Process expects a JDE environment to be specified via environment variables so post PDF processing can be 
+  // isolated for each JDE environment DV, PY, UAT and PROD
+  // therefore environment check needs to be part of query restrictions so construct that here
+  if ( jdeEnv === 'DV812' ) {
+    jdeEnvCheck = " AND (( jcenhv = 'DV812') OR (jcenhv = 'JDV812')) "; 
+  } else {
+    if ( jdeEnv === 'PY812' ) {
+      jdeEnvCheck = " AND (( jcenhv = 'PY812') OR (jcenhv = 'JPY812') OR (jcenhv = 'UAT812') OR (jcenhv = 'JUAT812')) "; 
+    } else {
+      if ( jdeEnv === 'PY812' ) {
+        jdeEnvCheck = " AND (( jcenhv = 'PD812') OR ( jcenhv = 'JPD812')) ";      
+      }
+    }
+  }
+
+
 
   // We have monitorFromDate to build the JDE Job Control checking query, however, we need to also account for 
   // application startups that are potentially checking from a few days ago plus we need to account for when we are 
@@ -197,7 +215,7 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
     // simply look for Job Control entries greater than or equal to monitorFromDate and monitorFromTime
      
     query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDb.trim() + ".F556110 ";
-    query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' "
+    query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND jcactdate = " + monitorFromDate + ' AND jcacttime >= ' + monitorFromTime;
     query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
     query += " ( SELECT RTRIM(crpgm, ' ') FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid = 'PDFMAIL' OR crcfgsid = 'PDFLOGO' )";
@@ -209,7 +227,7 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
     // and check for records on both sides of the date change
 
     query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDb.trim() + ".F556110 ";
-    query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' "
+    query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND (( jcactdate = " + monitorFromDate + " AND jcacttime >= " + monitorFromTime + ") ";
     query += " OR ( jcactdate > " + monitorFromDate + " )) ";
     query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
