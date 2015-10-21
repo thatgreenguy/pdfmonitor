@@ -129,7 +129,7 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
 
         } else if ( rows.length == 0 ) {
 
-          log.i( 'No records found in JDE process Queue table has been cleared / is empty' );
+          log.d( 'No records found in JDE process Queue table has been cleared / is empty' );
 
           response.result = null;
           closeResultSet( rs );
@@ -288,10 +288,7 @@ module.exports.addJobToProcessQueue = function( pool, dbc, row, cb ) {
 
   var jdeJobName = row[ 0 ];
 
-  log.d( 'INSERTING row : ' + row );
-
   insertEntry( dbc );
-
 
   // Handle Insertion of new Jde Pdf Job to F559811 Jde Pdf Process Queue
   function insertEntry( dbc ) {

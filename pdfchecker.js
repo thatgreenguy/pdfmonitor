@@ -169,7 +169,7 @@ function rowFailure( dbp, dbc, row, err, result ) {
 
 function rowSuccess( dbp, dbc, row, err, result ) {
 
-  log.i( row + ' Processed: ' + result );
+  log.i( ' PDF Entry added to Queue : ' + result );
 
 }
 

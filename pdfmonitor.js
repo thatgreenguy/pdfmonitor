@@ -38,16 +38,16 @@ function startMonitorProcess() {
   // If poll Interval not supplied via environment variables then default it to 1 second
   if ( typeof( pollInterval ) === 'undefined' ) pollInterval = 1000;
 
-  pollIntervalCheckAdjustment = moment.duration( ( pollInterval * 2 ), 'milliseconds' ),
-
   log.i( '' );
-  log.i( '----- DLINK JDE PDF Queue Monitoring starting' ); 
+  log.i( '----- DLINK JDE PDF Queue Monitoring starting - Monitor' ); 
   log.i( '' );
   log.i( '----- JDE Environment : ' + jdeEnv ); 
   log.i( '----- JDE Database    : ' + jdeEnvDb ); 
+  log.i( '' );
   log.i( '----- Polling Interval   : ' + pollInterval ); 
-  log.i( '----- Monitor for new PDF files in JDE PrintQueue ' );
-  log.i( '----- and if configured for post Pdf processing stick them into the F559811 JDE PDF Process Queue' ); 
+  log.i( '' );
+  log.i( '----- Monitor for new PDF files appearing in JDE PrintQueue - and if configured' );
+  log.i( '----- for any post Pdf processing (Logo, Mail) add entry to F559811 JDE PDF Process Queue' ); 
   log.i( '' );
 
   // Handle process exit from DOCKER STOP, system interrupts, uncaughtexceptions or CTRL-C 
@@ -109,7 +109,12 @@ function calculateTimeOffset( dbp ) {
       currentDateTime = new Date();
       centosMoment = moment();
       aixMoment = moment( result[ 0 ] );
+
+      // Push time offset back double the poll interval just to be sure don't miss a PDF job completing in last few milliseconds
       timeOffset = centosMoment - aixMoment;
+      log.d( 'Before Poll adjustment: ' +  timeOffset );
+      timeOffset = parseInt(timeOffset) + (( parseInt(pollInterval) * 2 ));
+      log.d( 'After Poll adjustment: ' + timeOffset );
 
       log.d( 'CENTOS ' + centosMoment.format() );
       log.d( 'AIX ' + aixMoment.format() );
@@ -120,6 +125,11 @@ function calculateTimeOffset( dbp ) {
         timeOffset = 0 - timeOffset;
 
       } 
+
+      // Adjust AIX time (Used for Query Checking) by timeOffset
+      aixMoment = aixMoment.add( timeOffset, 'milliseconds' );
+      log.v( 'Adjusted AIX Time used for Query Check : ' + aixMoment.format() );
+
 
       log.verbose( 'Oracle DB Host Time: ' + result + ' Application Host Time: ' + currentDateTime );
       log.verbose( 'Calculated Time Offset between hosts is : ' + timeOffset + ' milliseconds' +
@@ -158,6 +168,7 @@ function determineMonitorStartDateTime( dbp, centosMoment, aixMoment ) {
           lastJdeJob = 'unknown'; 
           monitorFromDate = audit.getJdeJulianDateFromMoment( aixMoment );
           monitorFromTime = aixMoment.format( 'HHmmss' );
+          log.i( 'F559811 is empty so begin Monitoring from now : ' + monitorFromDate + ' ' + monitorFromTime );     
           
 
         } else {
