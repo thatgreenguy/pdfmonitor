@@ -19,6 +19,7 @@ var log = require( './common/logger.js' ),
 // Functions -
 //
 // module.exports.getLatestQueueEntry = function( pool, cb )
+// module.exports.getPdfEntry = function( pool, pdf, cb )
 // module.exports.getEnterpriseServerSystemDateTime = function( pool, cb )
 // module.exports.addJobToProcessQueue = function( pool, dbc, row, cb )
 
@@ -137,6 +138,137 @@ module.exports.getLatestQueueEntry = function( pool, cb ) {
         } else if ( rows.length > 0 ) {
 
           log.d( 'We have latest processed entry from queue: ' + rows[ 0 ] ); 
+  
+          response.result = rows[ 0 ];
+          closeResultSet( rs );
+
+        }   
+      });
+    }
+  }
+
+
+  // Get a pooled connection, check the Jde PDF process Queue, cleanup and return
+  odb.getConnection( pool, processConnection );
+
+}
+
+
+// Generally want to avoid duplicate key errors when inserting new PDF entries to Pdf Process Queue
+// This function checks to see if a PDF already exists in the file or not
+// If not returned result will be null otherwise it will contain the row
+module.exports.getPdfEntry = function( pool, pdf, cb ) {
+
+  var response = {},
+    cn = null;
+
+  response.error = null;
+  response.result = null;
+
+  
+  // Ensure Oracle resources released before handing response back to caller
+  function releaseReturn() {
+
+    if ( cn ) {
+
+      odb.releaseConnection( cn, 
+      function( err, result ) {
+ 
+        if ( err ) {
+
+          log.e( 'Failed to release Oracle Connection back to Pool' + err );
+          return cb( err );
+
+        } else {
+
+         log.d( ' Response : Error: ' + response.error + ' Result: ' + response.result );
+
+         return cb( response.error, response.result ); 
+
+        }
+      });    
+    }
+  }  
+
+
+  function closeResultSet( rs ) {
+
+    odb.closeSelectSet( cn, rs, function( err ) {
+
+      if ( err ) {
+
+        log.e( 'FAILED to close result set' + err );
+        releaseReturn();            
+
+      } else {
+
+        log.d( 'Result Set closed now release connection' );
+        releaseReturn();            
+
+      }
+    });
+  }
+
+
+  function processConnection( err, connection ) {
+
+    var query = null,
+      binds = [],
+      options = { resultSet: true };
+
+    if ( err ) {
+
+      log.e( 'Failed to get a connection' );
+      log.e( err );
+
+      response.error = err;
+      releaseReturn();
+      
+    } else {
+
+      // Make returned connection available to other functions
+      cn = connection;
+ 
+      query = "SELECT * FROM " + jdeEnvDb.trim() + ".F559811 WHERE jpfndfuf2 = pdf.trim() ";
+
+      odb.performSQL( cn, query, binds, options, processResult );
+
+    }
+  }
+
+  function processResult( err, rs ) {
+
+    if ( err ) {
+
+      log.e( 'Failed to get a Select result' );
+      log.e( err );
+
+      response.error = err;
+      response.result = null;
+      releaseReturn();
+
+    } else {
+
+      rs.resultSet.getRows( 1, function( err, rows ) {
+
+        if ( err ) {
+
+          log.e( 'Failed to get Row from resultset' );
+          log.e( err );
+
+          response.error = err;
+          closeResultSet( rs );
+
+        } else if ( rows.length == 0 ) {
+
+          log.d( 'PDF : ' + pdf + ' Is not in the F559811 JDE PDF Process Queue' );
+
+          response.result = null;
+          closeResultSet( rs );
+
+        } else if ( rows.length > 0 ) {
+
+          log.d( 'PDF : ' + pdf + ' Is already in the F559811 JDE PDF Process Queue' );
   
           response.result = rows[ 0 ];
           closeResultSet( rs );

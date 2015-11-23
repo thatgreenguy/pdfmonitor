@@ -155,7 +155,7 @@ function processRecords( p, cb ) {
     });
   }
 
-  // Start fetching and processing rows from query 
+  // Start fetching and processing rows from query - fetchNextRow calls itself until no more rows! 
   fetchNextRow( p, cb );
 
 }
@@ -166,9 +166,43 @@ function processNewPdf( p, row, cb ) {
 
   log.d( p.lastJdeJob + ' Processing new Pdf row : ' + row );  
 
+  // If the last known PDF processed matches current PDF entry then we can ignore it
+  if ( row[ 0 ] == p.lastJdeJob ) {
+  
+    log.d( 'This PDF : ' + row[ 0 ] + ' has already been processed - Ignore it' );
+    return cb( null );
 
-  return cb( null);
+  } else {
 
+    // Check this PDF definitely not already added to PDF process Queue before attempting insert
+    // if several jobs happen to finish at same time e.g. R4210IC overnight jobs often do)
+    // query check may have picked up say 3 rows that have already been processed and above
+    // check only identifies one of them - so need to check DB before trying Insert
+
+    pdfprocessqueue.getPdfEntry( p.pool, row[ 0 ], function( err, result ) {
+
+      if ( err ) {
+
+        log.e( 'Error checking if this PDF : ' + row[ 0 ] + ' is already in F559811' );
+        return cb( err );
+        
+      } else {
+
+        if ( result !== null ) {
+
+          log.d( ' PDF : ' + row[ 0 ] + ' already added to the JDE PDF Process Queue F559811 - Ignore!' );
+          return cb( null );
+
+        } else {
+
+          log.d( ' PDF : ' + row[ 0 ] + ' not yet added to JDE PDF Process Queue F559811 - Process / Add it now' );
+          return cb( null );
+          
+
+        }
+      }
+    });
+  }
 }
 
 
