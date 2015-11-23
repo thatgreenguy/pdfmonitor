@@ -112,9 +112,57 @@ function processRecords( p, cb ) {
 
   log.v( p.lastJdeJob + ' : Process Query Results' );
 
-  return cb( null );
+  // Don't know how many rows exactly will be read so read in blocks of 10 and recurse until all done 
+  // (usually 1 or maybe 2 or 3 PDF entries each cycle but on startup could be quite a few)
+  function fetchNextRow( p, cb ) {
+
+    p.rs.getRows( 1, function( err, rows ) { 
+
+      if ( err ) {
+
+        log.e( p.lastJdeJob + ' : Error reading resultset ' );
+        return cb( err );
+
+      } else if ( rows.length == 0 ) { 
+
+        log.d( p.lastJdeJob + ' : No more rows to read ' );
+        return cb( null );
+
+      } else if ( rows.length > 0 ) {
+
+        log.d( p.lastJdeJob + ' : Read row ' + rows[ 0 ] '  );
+   
+        // Process rows read (new Pdf entries)     
+        processNewPdf( p, rows[ 0 ], function( err, res ) {
+
+          if ( err ) {
+
+            log.e( p.lastJdeJob + ' Error processing new PDF Entry ' + err );
+            return cb( err );
+
+          } else {
+
+            log.d( p.lastJdeJob + ' Processed new PDF Entry ' + rows[ 0 ] );
+            fetchNextRow( p, cb )
+
+          }
+        });
+      }
+    });
+  }
+}
+
+
+// Process each record record
+function processNewPdf( p, row, cb ) {
+
+  log.d( p.lastJdeJob + ' Processing new Pdf row : ' + row );  
+
+
+  return cb( null);
 
 }
+
 
 
 // Close resultset, release connection then return to caller
