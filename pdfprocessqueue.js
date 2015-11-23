@@ -229,7 +229,7 @@ module.exports.getPdfEntry = function( pool, pdf, cb ) {
       // Make returned connection available to other functions
       cn = connection;
  
-      query = "SELECT * FROM " + jdeEnvDb.trim() + ".F559811 WHERE jpfndfuf2 = pdf.trim() ";
+      query = "SELECT * FROM " + jdeEnvDb.trim() + ".F559811 WHERE jpfndfuf2 = '" + pdf.trim() + "' ";
 
       odb.performSQL( cn, query, binds, options, processResult );
 
