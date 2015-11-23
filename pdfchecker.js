@@ -196,9 +196,24 @@ function processNewPdf( p, row, cb ) {
         } else {
 
           log.d( ' PDF : ' + row[ 0 ] + ' not yet added to JDE PDF Process Queue F559811 - Process / Add it now' );
-          return cb( null );
-          
+ 
+          // Hand over this row to be added to the F559811 
+          // No callback if the Select Check/Insert combination fails it will be picked up again and retried on 
+          // a later run!
+          pdfprocessqueue.addJobToProcessQueue( p.pool, p.dbc, row, function( err, result ) {
 
+            if ( err ) {
+
+              log.d( ' PDF : ' + row[ 0 ] + ' Error trying to insert - will retry on next run!' );
+              return cb( err );
+
+            } else {
+
+              log.d( ' PDF : ' + row[ 0 ] + ' Added to JDE PDF Process Queue' );
+              return cb( null );
+
+            }
+          });      
         }
       }
     });
