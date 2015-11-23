@@ -110,27 +110,31 @@ function performQuery( p, cb ) {
 // Process all results from query 
 function processRecords( p, cb ) {
 
+  var asyncCb;
+
+  asyncCb = cb;
+
   log.v( p.lastJdeJob + ' : Process Query Results' );
 
   // Don't know how many rows exactly will be read so read in blocks of 10 and recurse until all done 
   // (usually 1 or maybe 2 or 3 PDF entries each cycle but on startup could be quite a few)
-  function fetchNextRow( p, cb ) {
+  function fetchNextRow( p, asyncCb ) {
 
     p.rs.getRows( 1, function( err, rows ) { 
 
       if ( err ) {
 
         log.e( p.lastJdeJob + ' : Error reading resultset ' );
-        return cb( err );
+        return asyncCb( err );
 
       } else if ( rows.length == 0 ) { 
 
         log.d( p.lastJdeJob + ' : No more rows to read ' );
-        return cb( null );
+        return asyncCb( null );
 
       } else if ( rows.length > 0 ) {
 
-        log.d( p.lastJdeJob + ' : Read row ' + rows[ 0 ] '  );
+        log.d( p.lastJdeJob + ' : Read row ' + rows[ 0 ] );
    
         // Process rows read (new Pdf entries)     
         processNewPdf( p, rows[ 0 ], function( err, res ) {
@@ -138,18 +142,22 @@ function processRecords( p, cb ) {
           if ( err ) {
 
             log.e( p.lastJdeJob + ' Error processing new PDF Entry ' + err );
-            return cb( err );
+            return asyncCb( err );
 
           } else {
 
             log.d( p.lastJdeJob + ' Processed new PDF Entry ' + rows[ 0 ] );
-            fetchNextRow( p, cb )
+            fetchNextRow( p, asyncCb )
 
           }
         });
       }
     });
   }
+
+  // Start fetching and processing rows from query 
+  fetchNextRow( p, cb );
+
 }
 
 
