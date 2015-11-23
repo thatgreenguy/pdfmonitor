@@ -38,7 +38,7 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
 
   p = { 'pool': dbp, 'monitorFromDate': monitorFromDate, 'monitorFromTime': monitorFromTime, 'timeOffset': timeOffset, 'lastJdeJob': lastJdeJob, 'cb': cb };
 
-  log.d( p.lastJdeJob + ' : Perform Check for new PDF\'s' );
+  log.v( p.lastJdeJob + ' : Perform Check for new PDF\'s' );
 
   async.series([
     function( next ) { getConnection( p, next ) },
@@ -60,27 +60,57 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
 // Get database connection from database pool to use for this query check  
 function getConnection( p, cb ) {
 
-  log.d( p.lastJdeJob + ' : Get Connection' );
+  log.v( p.lastJdeJob + ' : Get Connection' );
 
-  return cb( null );
+  odb.getConnection( p.pool, function( err, dbc ) {
 
+    if ( err ) {
+
+      log.d( p.lastJdeJob + ' : getConnection Failed : ' + err );     
+      return cb( err );
+
+    } else {
+
+      p.dbc = dbc;
+      return cb( null );
+
+    }
+
+  });
 }
 
 
 // execute the required query
 function performQuery( p, cb ) {
 
-  log.d( p.lastJdeJob + ' : Perform Query' );
+  var querySql,
+    binds = [],
+    options = { resultSet: true };
 
-  return cb( null );
+  log.v( p.lastJdeJob + ' : Perform Query' );
+  querySql = constructQuery( p.monitorFromDate, p.monitorFromTime, p.timeOffset );
 
+  p.dbc.execute( querySql, binds, options, function( err, res ) {
+
+    if ( err ) {
+
+      log.e( p.lastJdeJob + ' : Error on Perform Query' + err );
+      return cb( err );
+ 
+    } else {
+
+      p.rs = res.resultSet;
+      return cb( null );
+
+    }
+  });
 }
 
 
 // Process all results from query 
 function processRecords( p, cb ) {
 
-  log.d( p.lastJdeJob + ' : Process Query Results' );
+  log.v( p.lastJdeJob + ' : Process Query Results' );
 
   return cb( null );
 
@@ -90,7 +120,7 @@ function processRecords( p, cb ) {
 // Close resultset, release connection then return to caller
 function closeReleaseReturn( p, cb ) {
 
-  log.d( p.lastJdeJob + ' : Close, Release and Return' );
+  log.v( p.lastJdeJob + ' : Close, Release and Return' );
 
   async.series([
     function( next ) { closeResultSet( p, next ) }
@@ -111,7 +141,7 @@ function closeReleaseReturn( p, cb ) {
 // Close result set 
 function closeResultSet( p, cb ) {
 
-  log.d( p.lastJdeJob + ' : Close Result Set' );
+  log.v( p.lastJdeJob + ' : Close Result Set' );
 
 
   // If we have a result set then close it
@@ -123,13 +153,14 @@ function closeResultSet( p, cb ) {
         log.e( 'Error closing result set: ' + err );
         return cb( err );
       
+      } else {
+
+        log.d( p.lastJdeJob + ' : Result Set Closed ' );
+        return cb( null );
       }
-
-      return cb( null );
-
     });
 
-  // Otherwise no result set to close so return normally
+  // Otherwise ...
   } else {
 
     log.d( p.lastJdeJob + ' : No Result Set To Close? ' );
@@ -142,11 +173,11 @@ function closeResultSet( p, cb ) {
 // Release Connection and return to caller 
 function releaseConnection( p, cb ) {
 
-  log.d( p.lastJdeJob + ' : Release Connection back to pool' );
+  log.v( p.lastJdeJob + ' : Release Connection back to pool' );
 
   // If we have a connection then close it
-  if ( p.cn ) {
-    p.cn.release( function( err ) {
+  if ( p.dbc ) {
+    p.dbc.release( function( err ) {
 
       if ( err ) {
 
@@ -156,6 +187,7 @@ function releaseConnection( p, cb ) {
       } else {
 
         // Pass control back to caller
+        log.d( p.lastJdeJob + ' : Connection released back to pool ' );
         return p.cb( null );
       }
     });
