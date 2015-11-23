@@ -146,7 +146,7 @@ function processRecords( p, cb ) {
 
           } else {
 
-            log.d( p.lastJdeJob + ' Processed new PDF Entry ' + rows[ 0 ] );
+            log.v( p.lastJdeJob + ' Processed new PDF Entry ' + rows[ 0 ] );
             fetchNextRow( p, asyncCb )
 
           }
@@ -209,7 +209,7 @@ function processNewPdf( p, row, cb ) {
 
             } else {
 
-              log.d( ' PDF : ' + row[ 0 ] + ' Added to JDE PDF Process Queue' );
+              log.i( ' PDF : ' + row[ 0 ] + ' Added to JDE PDF Process Queue' );
               return cb( null );
 
             }
@@ -293,6 +293,7 @@ function releaseConnection( p, cb ) {
 
         // Pass control back to caller
         log.d( p.lastJdeJob + ' : Connection released back to pool ' );
+        log.d( ' ' );
         return p.cb( null );
       }
     });
