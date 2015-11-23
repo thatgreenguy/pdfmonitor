@@ -192,7 +192,7 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
     if ( jdeEnv === 'PY812' ) {
       jdeEnvCheck = " AND (( jcenhv = 'PY812') OR (jcenhv = 'JPY812') OR (jcenhv = 'UAT812') OR (jcenhv = 'JUAT812')) "; 
     } else {
-      if ( jdeEnv === 'PY812' ) {
+      if ( jdeEnv === 'PD812' ) {
         jdeEnvCheck = " AND (( jcenhv = 'PD812') OR ( jcenhv = 'JPD812')) ";      
       }
     }
