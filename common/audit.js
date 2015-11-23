@@ -7,8 +7,7 @@
 // application itself to determine the last Pdf processed - determines date and time to run query checks from. 
   
 
-var oracledb = require( 'oracledb' ),
-  log = require( './logger' ),
+var log = require( './logger' ),
   moment = require( 'moment' ),
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
   aixTimeOffset = process.env.AIX_TIME_OFFSET,
@@ -37,10 +36,7 @@ exports.aixTimeOffset = aixTimeOffset;
 // exports getJdeJulianDate function( dt ) 
 // exports getJdeAuditTime function( dt, padChar ) 
 // exports adjustTimestampByMinutes function( timestamp, mins ) 
-// exports determineLastProcessedDateTime function( err, dbCn, cb ) 
 // processResultsFromF559811( dbCn, rsF559811, numRows, cb) 
-// oracleResultSetClose( dbCn, rs ) 
-// oracledbCnRelease( dbCn ) 
 
 
 // Insert new Audit entry into the JDE audit log file.
@@ -165,110 +161,4 @@ exports.adjustTimestampByMinutes = function( timestamp, mins ) {
 
   return {'jdeDate': newdt, 'jdeTime': newtm, 'timestamp': dt, 'minutes': mins };
 }
-
-
-// This proces usually monitors JDE Report queue from the last Date and Time it handled a JDE report
-// Reference the Mailer audit log to get Date and Time of the Last emailed report
-// If Audit Log file has benn cleared or this is genuinely the first time the pdfmailer has run then 
-// use current Date and Time as the point to start monitoring from.
-// Running from the date and time of the last emailed report allows for recovery on startup should this process
-// or its host server be taken off line for a some reason - on restart it will recover and email everything it should have done!
-exports.determineLastProcessedDateTime = function( err, dbCn, cb ) {
-
-  var query = null;
-	
-  query  = "SELECT jpupmj, jpupmt, jpsawlatm, jpfndfuf2, jpblkk FROM " + jdeEnvDb.trim() + ".F559811 ";
-  query += " ORDER BY jpsawlatm DESC";
-
-  dbCn.execute( query, [], { resultSet: true }, 
-  function( err, rs ) {
-
-    if ( err ) {
-      log.error( err.message )
-      return cb( err, null );
-    };
-
-    processResultsFromF559811( dbCn, rs.resultSet, 1, cb );
-
-  });
-}
-
-
-
-// Process results from JDE Dlink Post Pdf handling Queue table but only interested in last Pdf job added to the Queue
-// to determine date and time which is required to start monitoring from
-function processResultsFromF559811( dbCn, rs, numRows, cb) {
-
-  var auditRecord,
-    tokens,
-    data = {},
-    ts = null;
-    ats = null;
-
-  rs.getRows( numRows, 
-  function( err, rows ) {
-  
-    if ( err ) {
-
-      oracleResultSetClose( dbCn, rs );
-      cb( err, null );
-
-    } else if ( rows.length == 0 ) {
-
-      log.verbose( 'Last Audit Entry: Not found use current Date and Time' );
-      oracleResultSetClose( dbCn, rs );
-
-      // Get current Date and Time adjusted by Aix Server Time Offset
-      ts = exports.createTimestamp();      
-      ats = exports.adjustTimestampByMinutes( ts );  
-
-      data[ 'lastAuditEntryDate' ] = ats.jdeDate;
-      data[ 'lastAuditEntryTime' ] = ats.jdeTime;
-      data[ 'lastAuditEntryJob' ] = 'None';
-
-      cb( null, data );
-
-    } else if ( rows.length > 0 ) {
-
-      // Last audit entry retrieved
-      // Determine Date and Time to start monitoring from then pass control onwards
-      log.verbose( 'Last Audit Entry: ' + rows[ 0 ] );
-      oracleResultSetClose( dbCn, rs );
-
-      jdedatetime = rows[ 0 ][ 4 ];
-      tokens = jdedatetime.split(' ');
-
-      data[ 'lastAuditEntryDate' ] = tokens[ 0 ];
-      data[ 'lastAuditEntryTime' ] = tokens[ 1 ];
-      data[ 'lastAuditEntryJob' ] = rows[ 0 ][ 3 ];
-
-      cb( null, data );
-
-    }
-  });
-}
-
-
-// Close Oracle database result set
-function oracleResultSetClose( dbCn, rs ) {
-
-  rs.close( function( err ) {
-    if ( err ) {
-      log.error( err );
-      oracledbCnRelease( dbCn );
-    }
-  });
-}
-
-
-// Close Oracle database Connection
-function oracledbCnRelease( dbCn ) {
-
-  dbCn.release( function ( err ) {
-    if ( err ) {
-      log.error( err );
-    }
-  });
-}
-
 

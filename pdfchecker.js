@@ -41,6 +41,7 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
   log.v( p.lastJdeJob + ' : Perform Check for new PDF\'s' );
 
   async.series([
+    function( next ) { reportPoolStats( p, next ) },
     function( next ) { getConnection( p, next ) },
     function( next ) { performQuery( p, next ) },
     function( next ) { processRecords( p, next ) }
@@ -54,6 +55,19 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
     closeReleaseReturn( p );
 
   });
+}
+
+
+// Get database connection from database pool to use for this query check  
+function reportPoolStats( p, cb ) {
+
+  log.v( p.lastJdeJob + ' : Report Pool Stats' );
+
+  log.v( 'Connections in use : ' + p.pool.connectionsInUse );
+  log.v( 'Connections open   : ' + p.pool.connectionsOpen );
+
+  return cb( null );
+
 }
 
 
