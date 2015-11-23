@@ -14,6 +14,7 @@
 
 
 var moment = require( 'moment' ),
+  async = require( 'async' ),
   log = require( './common/logger.js' ),
   odb = require( './common/odb.js' ),
   pdfprocessqueue = require( './pdfprocessqueue.js' ),
@@ -26,15 +27,154 @@ var moment = require( 'moment' ),
 // Functions -
 //
 // module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, cb )
-// function processRows ( dbp, dbc, rows, lastJdeJob )
-// function rowFailure( dbp, dbc, row, err, result ) 
-// function rowSuccess( dbp, dbc, row, err, result ) 
 // function constructQuery( monitorFromDate, monitorFromTime, timeOffset )
 
 
 // Grab a connection from the Pool, query the database for the latest Queue entry
 // release the connection back to the pool and finally return to caller with date/time of last entry
 module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, lastJdeJob, cb ) {
+
+  var p;
+
+  p = { 'pool': dbp, 'monitorFromDate': monitorFromDate, 'monitorFromTime': monitorFromTime, 'timeOffset': timeOffset, 'lastJdeJob': lastJdeJob, 'cb': cb };
+
+  log.d( p.lastJdeJob + ' : Perform Check for new PDF\'s' );
+
+  async.series([
+    function( next ) { getConnection( p, next ) },
+    function( next ) { performQuery( p, next ) },
+    function( next ) { processRecords( p, next ) }
+  ], function( err, res ) {
+
+    if ( err ) {
+
+      log.d( p.lastJdeJob + ' : Async series error : ' + err );
+
+    }
+    closeReleaseReturn( p );
+
+  });
+}
+
+
+// Get database connection from database pool to use for this query check  
+function getConnection( p, cb ) {
+
+  log.d( p.lastJdeJob + ' : Get Connection' );
+
+  return cb( null );
+
+}
+
+
+// execute the required query
+function performQuery( p, cb ) {
+
+  log.d( p.lastJdeJob + ' : Perform Query' );
+
+  return cb( null );
+
+}
+
+
+// Process all results from query 
+function processRecords( p, cb ) {
+
+  log.d( p.lastJdeJob + ' : Process Query Results' );
+
+  return cb( null );
+
+}
+
+
+// Close resultset, release connection then return to caller
+function closeReleaseReturn( p, cb ) {
+
+  log.d( p.lastJdeJob + ' : Close, Release and Return' );
+
+  async.series([
+    function( next ) { closeResultSet( p, next ) }
+  ], function( err, res ) {
+
+    if ( err ) {
+
+      log.d( p.lastJdeJob + ' : Async series error : ' + err );
+
+    }
+
+    releaseConnection( p );
+
+  });
+}
+
+
+// Close result set 
+function closeResultSet( p, cb ) {
+
+  log.d( p.lastJdeJob + ' : Close Result Set' );
+
+
+  // If we have a result set then close it
+  if ( p.rs ) {
+    p.rs.close( function( err ) {             
+
+      if ( err ) {
+
+        log.e( 'Error closing result set: ' + err );
+        return cb( err );
+      
+      }
+
+      return cb( null );
+
+    });
+
+  // Otherwise no result set to close so return normally
+  } else {
+
+    log.d( p.lastJdeJob + ' : No Result Set To Close? ' );
+    return cb( null );
+
+  }
+}
+
+
+// Release Connection and return to caller 
+function releaseConnection( p, cb ) {
+
+  log.d( p.lastJdeJob + ' : Release Connection back to pool' );
+
+  // If we have a connection then close it
+  if ( p.cn ) {
+    p.cn.release( function( err ) {
+
+      if ( err ) {
+
+        log.e( 'Error releasing connection : ' + err );
+        return p.cb( err );
+
+      } else {
+
+        // Pass control back to caller
+        return p.cb( null );
+      }
+    });
+  
+  // Otherwise ...
+  } else {
+
+    // Pass control back to caller
+    return p.cb( null );
+  }
+}
+
+
+
+
+
+// Grab a connection from the Pool, query the database for the latest Queue entry
+// release the connection back to the pool and finally return to caller with date/time of last entry
+module.exports.OLDqueryJdeJobControl = function(  dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, lastJdeJob, cb ) {
 
   var response = {},
   cn = null,
@@ -54,7 +194,6 @@ module.exports.queryJdeJobControl = function(  dbp, monitorFromDate, monitorFrom
   query = constructQuery( monitorFromDate, monitorFromTime, timeOffset );
 
   log.d( 'Check Started: ' + checkStarted );
-
 
   odb.getConnection( dbp, function( err, dbc ) {
 
