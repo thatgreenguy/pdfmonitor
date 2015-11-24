@@ -41,7 +41,7 @@ module.exports.getNewPdf = function(  pargs, cbWhenDone ) {
         return cbWhenDone( err );
       }  
 
-      pargs.newPdfRows = result;
+      pargs.newPdfRows = result.rows;
       log.v( 'Read following rows from Jde Job Control : ' + result );
       dbc.release( function( err ) {
         if ( err ) {
