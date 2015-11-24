@@ -1,6 +1,7 @@
 var async = require( 'async' ),
   log = require( './common/logger.js' ),
   getlastpdf = require( './getlastpdf.js' ),
+  getnewpdf = require( './getnewpdf.js' ),
   addnewpdf = require( './addnewpdf.js' ),
   pollInterval = process.env.POLLINTERVAL;
 
@@ -18,6 +19,7 @@ function check( cbDone ) {
 
   async.series([
     function( next ) { checkGetLastPdf( parg, next )  },
+    function( next ) { checkGetNewPdf( parg, next )  },
     function( next ) { checkAddNewPdf( parg, next )  }
   ], function( err, res ) {
 
@@ -58,6 +60,30 @@ function checkGetLastPdf( parg, next ) {
     parg.newPdfRow = [  dummy , '115323', '101112'];
 dummy = dummy + 1;
     return next( null );
+
+  });
+}    
+
+
+function checkGetNewPdf( parg, next ) {
+
+  getnewpdf.getNewPdf( parg, function( err, result ) {
+
+    if ( err ) {
+      return next( err );
+    }
+
+    log.v( 'New PDF entries : ' + parg.newPdfRows );
+
+    async.eachSeries( 
+      parg.newPdfRows, 
+      function( row, cb ) {
+      
+        log.d( 'Row: ' + row );
+        return cb( null );
+
+      },
+      next );
 
   });
 }    
