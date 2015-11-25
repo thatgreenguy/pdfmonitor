@@ -1,39 +1,210 @@
-var log = require( './common/logger.js' ),
-  ondeath = require( 'death' )({ uncaughtException: true }),
+var async = require( 'async' ),
   moment = require( 'moment' ),
-  odb = require( './common/odb.js' ),
+  log = require( './common/logger.js' ),
   audit = require( './common/audit.js' ),
-  pdfchecker = require( './pdfchecker.js' ),
-  pdfprocessqueue = require( './pdfprocessqueue.js' ),
-  poolRetryInterval = 30000,
+  getlastpdf = require( './getlastpdf.js' ),
+  getnewpdf = require( './getnewpdf.js' ),
+  addnewpdf = require( './addnewpdf.js' ),
+  pdfinqueue = require( './pdfinqueue.js' ),
+  getjdedatetime = require( './getjdedatetime.js' ),
   pollInterval = process.env.POLLINTERVAL,
-  pollIntervalCheckAdjustment,
-  dbp = null,
-  monitorFromDate = null,
-  monitorFromTime = null,
-  lastJdeJob = null,
-  timeOffset = 0
-  jdeEnv = process.env.JDE_ENV,
-  jdeEnvDb = process.env.JDE_ENV_DB;
+  monitorTimeOffset = 60;
 
 
-startMonitorProcess();
-
-
-// Functions
+// Synopsis
 //
-// startMonitorProcess() 
-// establishPool() 
-// processPool( err, pool ) 
-// calculateTimeOffset( dbp ) 
-// determineMonitorStartDateTime( dbp ) 
-// pollJdePdfQueue( dbp ) 
-// scheduleNextMonitorProcess( dbp ) 
-// endMonitorProcess( signal, err ) 
-//
+// Poll the JDE Job Control table 24/7.
+// Watch for any new PDF entries that have been setup for PDFLOGO and/or PDFMAIL processing (F559890).
+// When new qualifying PDF entries detected then they are added to the to the F559811 JDE PDF Post Process Queue at status 100.  
+// Post PDF Logo and/or Mail processing will happen shortly afterwards
+// When all configured post pdf processing is complete the pdf entries will move to status 999 - Complete
 
-// Do any startup / initialisation stuff
-function startMonitorProcess() {
+
+initialisation() 
+async.forever( check, error );
+
+
+// Function List
+// -------------
+//
+// function check( cbDone ) 
+// function error( cbDone ) 
+// function checkGetLastPdf( parg, next ) 
+// function checkGetJdeDateTime( parg, next ) 
+// function checkSetMonitorFrom( parg, next ) 
+// function checkGetNewPdf( parg, next ) 
+// function initialisation() 
+
+
+function check( cbDone ) {
+
+  var parg = {},
+    checkStart,
+    checkEnd;
+
+  checkStart = moment();
+  log.d( ' Perform Check ( every ' + pollInterval + ' milliseconds )' );
+
+  async.series([
+    function( next ) { checkGetLastPdf( parg, next )  },
+    function( next ) { checkGetJdeDateTime( parg, next )  },
+    function( next ) { checkSetMonitorFrom( parg, next )  },
+    function( next ) { checkGetNewPdf( parg, next )  }
+  ], function( err, res ) {
+
+    checkEnd = moment();
+    if ( err ) {
+
+      log.e( 'Unexpected error during check - Took : ' + moment.duration( checkEnd - checkStart ) );
+      log.e( 'Unexpected error during check : ' + err );
+      setTimeout( cbDone, pollInterval );
+      
+    } else {
+
+      log.i( 'Check Complete : Added ' + parg.pdfAddCount + ' new PDF entries to Queue : Took : ' + moment.duration( checkEnd - checkStart) );  
+      if ( parg.pdfAddErrorCount > 0 ) {
+        log.i( 'Check Complete : Failed to Add ' + parg.pdfAddErrorCount + ' PDF entries to Queue - already added?' );  
+      }
+      setTimeout( cbDone, pollInterval );
+
+    }
+  });
+
+}
+
+
+function error( cbDone ) {
+
+  log.e( ' Unexpected Error : ' + err );
+  setImmediate( cbDone );
+
+}
+
+
+function checkGetLastPdf( parg, next ) {
+
+  getlastpdf.getLastPdf( parg, function( err, result ) {
+
+    if ( err ) {
+      return next( err );
+    }
+
+    log.v( 'Last PDF processed : ' + result );
+    parg.lastPdfRow = result;
+    return next( null );
+
+  });
+}    
+
+
+function checkGetJdeDateTime( parg, next ) {
+
+  getjdedatetime.getJdeDateTime( parg, function( err, result ) {
+
+    if ( err ) {
+      return next( err );
+    }
+
+    log.v( 'Current JDE System Date/Time : ' + result );
+    return next( null );
+
+  });
+}    
+
+
+function checkSetMonitorFrom( parg, next ) {
+
+  var jdeMoment;
+
+  // Monitoring of the JDE job Control table is done from a particular Date and Time.
+  // Usually the last PDF added to the process queue (F559811) determines this date and time
+  // Idea is that as each new PDF is added to the process queue then the monitor query checks from that point forwards (keeps the query light)
+  // However, if the F559811 is cleared (or empty on first run) then as fallback use the current JDE System Date and Time as the start point for monitoring
+  // Once a new PDF is detected and added to the process queue then monitoring will continue from that point
+
+  if ( parg.monitorFromDate === 0 ) {
+
+    log.i( 'Last PDF check did not manage to set Monitor From Date and Time - F559811 file empty/cleared?' );
+    log.i( 'As fallback - start monitoring from current AIX (JDE System) Date and Time - until next PDF added to F559811 Process Queue' );
+
+    // Save AIX (JDE) Current System Date and Time in human readable format then convert monitor from date/time to JDE format
+    // Factor in a safety offset window of 60 seconds as sometimes monitoring query runs just before trigger data is copied from F986110 to F556110
+    parg.aixDateTime = parg.jdeDate + ' ' + parg.jdeTime;
+    jdeMoment = moment( parg.aixDateTime ).subtract( monitorTimeOffset, 'seconds' );
+    parg.monitorFromDate = audit.getJdeJulianDateFromMoment( jdeMoment );
+    parg.monitorFromTime = jdeMoment.format( 'HHmmss' );
+
+  }
+
+  log.v( 'Monitor for new PDF entries from : ' + parg.aixDateTime + ' JDE style : ' + parg.monitorFromDate + ' ' + parg.monitorFromTime );
+  return next( null );
+
+}    
+
+
+function checkGetNewPdf( parg, next ) {
+
+  parg.pdfAddCount = 0;
+  parg.pdfAddErrorCount = 0;
+
+  getnewpdf.getNewPdf( parg, function( err, result ) {
+
+    if ( err ) {
+      return next( err );
+    }
+
+    log.v( 'New PDF entries : ' + parg.newPdfRows );
+
+    async.eachSeries( 
+      parg.newPdfRows, 
+      function( row, cb ) {
+      
+        log.d( 'Row: ' + row );
+        parg.checkPdf = row[ 0 ];
+        parg.newPdfRow = row;
+
+
+        pdfinqueue.pdfInQueue( parg, function( err, result ) {
+
+          if ( err ) {
+
+            log.e( parg.checkPdf + ' Error - Unable to verify if in Queue or not ' );
+            return cb( err );
+
+          } else {
+
+            if ( parg.pdfInQueue >= 1 ) {
+              log.d( parg.checkPdf + ' PDF already in Queue - Ignore it ' );
+              return cb( null );
+
+            } else {
+              log.d( parg.checkPdf + ' PDF is new add to JDE Process Queue ' );
+
+              addnewpdf.addNewPdf( parg, function( err, result ) {
+
+                if ( err ) {
+
+                  parg.pdfAddErrorCount += 1;
+                  log.e( row[ 0 ] + ' : Failed to Add to Jde Process Queue : ' + err );
+                  return cb( null);            
+
+                } else {
+
+                  parg.pdfAddCount += 1;
+                  log.i( row[ 0 ] + ' : New PDF Added to Jde Process Queue ' );
+                  return cb( null );
+                }      
+              });
+            }        
+          }
+        });
+     },
+      next );
+  });
+}
+
+    
+function initialisation() {
 
   // If poll Interval not supplied via environment variables then default it to 1 second
   if ( typeof( pollInterval ) === 'undefined' ) pollInterval = 1000;
@@ -50,247 +221,4 @@ function startMonitorProcess() {
   log.i( '----- for any post Pdf processing (Logo, Mail) add entry to F559811 JDE PDF Process Queue' ); 
   log.i( '' );
 
-  // Handle process exit from DOCKER STOP, system interrupts, uncaughtexceptions or CTRL-C 
-  ondeath( endMonitorProcess );
-
-  // First need to establish an oracle DB connection pool to work with
-  establishPool();
-
-}
-
-
-// Establish Oracle DB connection pool
-function establishPool() {
-
-  odb.createPool( processPool );
-
-}
-
-
-// Check pool is valid and continue otherwise pause then retry establishing a Pool 
-function processPool( err, pool ) {
-
-  if ( err ) {
-
-    log.e( 'Failed to create an Oracle DB Connection Pool will retry shortly' );
-    
-    setTimeout( establishPool, poolRetryInterval );    
- 
-  } else {
-
-    log.v( 'Oracle DB connection pool established' );
-    dbp = pool;
-
-    calculateTimeOffset( dbp );
-    
-  }
-
-}
-
-
-// Calculate the time offset between Oracle DB Host (AIX) and this application host (CENTOS)
-function calculateTimeOffset( dbp ) {
-
-  var currentDateTime,
-    centosMoment,
-    aixMoment;
-
-  pdfprocessqueue.getEnterpriseServerSystemDateTime( dbp, 
-  function( err, result ) {
-
-    if ( err ) {
-
-      log.e( 'Unable to determine System Date and Time from Oracle DB Host' + err );
-      unexpectedDatabaseError( err );
-
-    } else {
-
-      // We should have Date and Time returned in format YYYY-MM-DD HH:MM:SS
-      currentDateTime = new Date();
-      centosMoment = moment();
-      aixMoment = moment( result[ 0 ] );
-
-      // Push time offset back double the poll interval just to be sure don't miss a PDF job completing in last few milliseconds
-      timeOffset = centosMoment - aixMoment;
-      log.d( 'Before Poll adjustment: ' +  timeOffset );
-      timeOffset = parseInt(timeOffset) + (( parseInt(pollInterval) * 2 ));
-      log.d( 'After Poll adjustment: ' + timeOffset );
-
-      log.d( 'CENTOS ' + centosMoment.format() );
-      log.d( 'AIX ' + aixMoment.format() );
-      log.d( moment.duration( centosMoment - aixMoment ).humanize() );
-
-      if ( centosMoment > aixMoment ) {
-     
-        timeOffset = 0 - timeOffset;
-
-      } 
-
-      // Adjust AIX time (Used for Query Checking) by timeOffset
-      aixMoment = aixMoment.add( timeOffset, 'milliseconds' );
-      log.v( 'Adjusted AIX Time used for Query Check : ' + aixMoment.format() );
-
-
-      log.verbose( 'Oracle DB Host Time: ' + result + ' Application Host Time: ' + currentDateTime );
-      log.verbose( 'Calculated Time Offset between hosts is : ' + timeOffset + ' milliseconds' +
-                ' or approx ' + moment.duration( centosMoment - aixMoment ).humanize() );
-
-      determineMonitorStartDateTime( dbp, centosMoment, aixMoment );
- 
-    }
-  });
-
-}
-
-
-// We have Current System Date and Time from Oracle DB Host set and any time offset value we need to consider
-// Check the F559811 DLINK Post PDF Handling Queue table for last processed entry - if found we need to check from
-// this Date and Time to handle recovery if application has been down for a while - if not found will simply
-// start monitoring from current System Date and Time passed thru...
-function determineMonitorStartDateTime( dbp, centosMoment, aixMoment ) {
-
-  var workDateTime;
-
-  // On start up look at last processed entry and if found start monitoring from there.
-
-    pdfprocessqueue.getLatestQueueEntry( dbp, function( err, result ) {
-
-      if ( err ) {
-
-        log.e( 'Unable to access the F559811 for last processed entry' + err );
-        unexpectedDatabaseError( err );
-
-      } else {
-
-        // If table Empty then use System Date and Time from Oracle Host to begin Monitoring
-        if ( result === null ) {
-
-          lastJdeJob = 'unknown'; 
-          monitorFromDate = audit.getJdeJulianDateFromMoment( aixMoment );
-          monitorFromTime = aixMoment.format( 'HHmmss' );
-          log.i( 'F559811 is empty so begin Monitoring from now : ' + monitorFromDate + ' ' + monitorFromTime );     
-          
-
-        } else {
-
-          // Track last PDF procesed and its last Activity Date and Time i.e. when the UBE Job finished
-          lastJdeJob = result[ 0 ];
-          workDateTime = result[ 1 ].split(' ');
-          monitorFromDate = workDateTime[ 0 ];
-          monitorFromTime = workDateTime[ 1 ];
-
-        }
-
-        // Found latest entry in F559811 JDE Post PDF Handling Process Queue - so start monitoring from there
-        log.d( 'Begin Monitoring from : ' + monitorFromDate + ' ' + monitorFromTime );     
-
-        pollJdePdfQueue( dbp );
-
-      }
-    });
-}
-
-
-// Begin the monitoring process which will run continuously until server restart or docker stop issued
-function pollJdePdfQueue( dbp ) {
-
-  var cb;
-
-  log.v( 'Last JDE Job was ' + lastJdeJob + ' - Checking from ' + monitorFromDate + ' ' + monitorFromTime );
-
-  cb = function() { scheduleNextMonitorProcess( dbp ) }; 
-  pdfchecker.queryJdeJobControl( dbp, monitorFromDate, monitorFromTime, pollInterval, timeOffset, 
-    lastJdeJob, cb );
-  
-}
-
-
-// When done processing any new PDF entries this is called to set up the next polled job 
-function scheduleNextMonitorProcess( dbp ) {
-
-  var cb;
-
-  cb = function() { calculateTimeOffset( dbp ) }; 
-  setTimeout( cb, pollInterval );    
- 
-
-}
-
-
-// Database error handling
-// Call this whe unexpected DB error encountered
-function unexpectedDatabaseError( err ) {
-
-  log.e( 'Unexpected Database error - unsure how to recover from this so exiting now!' + err );
-  releaseOracleResources( 1 ); 
-
-}
-
-
-// EXIT HANDLING
-//
-// Note: DOCKER STOP or CTRL-C is not considered a failed process - just a way to stop this application - so node exits with 0
-// An uncaught exception is considered a program crash so exists with code = 1
-function endMonitorProcess( signal, err ) {
-
-  if ( err ) {
-   
-    log.e( 'Received error from ondeath?' + err ); 
-
-    releaseOracleResources( 2 ); 
-
-
-  } else {
-
-    log.e( 'Node process has died or been interrupted - Signal: ' + signal );
-    log.e( 'Normally this would be due to DOCKER STOP command or CTRL-C or perhaps a crash' );
-    log.e( 'Attempting Cleanup of Oracle DB resources before final exit' );
-  
-    releaseOracleResources( 0 ); 
-
-  }
-
-}
-
-
-// Check to see if database pool is valid and if so attempt to release Oracle DB resources back to the Database
-// This function can be called from endMonitorProcess or if a database related error is detected
-// If unable to release resources cleanly application will exit with non-zero code (connections not released correctly?) 
-function releaseOracleResources( suggestedExitCode ) {
-
-  log.e( 'Problem detected so attempting to release Oracle DB resources' );
-  log.e( 'Application may exit or wait briefly and attempt recovery' );
-
-  // If no exit code passed in default it to exit with 0
-  if ( typeof( suggestedExitCode ) === 'undefined' ) { suggestedExitCode = 0 } 
-
-  // Release Oracle resources
-  if ( dbp ) {
-
-    odb.terminatePool( dbp, function( err ) {
-
-      if ( err ) {
-
-        log.d( 'Failed to release Oracle DB Connection Pool resources: ' + err );
-
-        dbp = null;
-        process.exit( 2 );
-
-      } else {
-
-        log.d( 'Oracle DB Connection Pool resources released successfully: ' );
-
-        process.exit( suggestedExitCode );
-
-      }
-    });
-
-  } else {
-
-    log.d( 'No Oracle DB Connection Pool to release: ' );
-
-    dbp = null;
-    process.exit( suggestedExitCode );
-
-  }
 }
