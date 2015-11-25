@@ -27,7 +27,7 @@ module.exports.getNewPdf = function(  pargs, cbWhenDone ) {
       return cbWhenDone( err );
     }  
 
-    sql = constructQuery( '115300', '033000', timeOffset );
+    sql = constructQuery( pargs.monitorFromDate, pargs.monitorFromTime, timeOffset );
     dbc.execute( sql, binds, options, function( err, result ) {
 
       if ( err ) {
@@ -80,8 +80,6 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
       }
     }
   }
-
-
 
   // We have monitorFromDate to build the JDE Job Control checking query, however, we need to also account for 
   // application startups that are potentially checking from a few days ago plus we need to account for when we are 

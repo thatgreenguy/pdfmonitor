@@ -7,20 +7,17 @@ var async = require( 'async' ),
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME };
   
 
-module.exports.getLastPdf = function(  pargs, cbWhenDone ) {
+module.exports.getJdeDateTime = function(  pargs, cbWhenDone ) {
 
   var p = {},
     sql,
     binds = [],
     options = {},
     row,
-    blkk,
+    systemdate,
     wka;
 
-  pargs.monitorFromDate = 0;
-  pargs.monitorFromTime = 0;
-
-  log.v( 'Get Connection to find Last PDF Job added to Queue' );
+  log.v( 'Get Connection to query oracle DB for Aix (JDE) Current Date and Time' );
 
   oracledb.getConnection( credentials, function( err, dbc ) {
 
@@ -29,7 +26,9 @@ module.exports.getLastPdf = function(  pargs, cbWhenDone ) {
       return cbWhenDone( err );
     }  
 
-    sql = "SELECT jpfndfuf2, jpblkk FROM " + jdeEnvDb.trim() + ".F559811 ORDER BY jpupmj DESC, jpupmt DESC ";
+    sql = 'SELECT TO_CHAR(SYSDATE, ';
+    sql += "'" + 'YYYY-MM-DD HH24:MI:SS' + "'" + ') "NOW" FROM DUAL ';
+
     dbc.execute( sql, binds, options, function( err, result ) {
 
       if ( err ) {
@@ -44,13 +43,13 @@ module.exports.getLastPdf = function(  pargs, cbWhenDone ) {
       }  
 
       row = result.rows[ 0 ];
-      if ( typeof row !== 'undefined' ) {
-        blkk = row[ 1 ];
-        wka = blkk.split(' ');
-        pargs.monitorFromDate = wka[ 0 ];
-        pargs.monitorFromTime = wka[ 1 ];
+      systemdate = row[ 0 ];
+      if ( typeof systemdate !== 'undefined' ) {
+        wka = systemdate.split(' ');
+        pargs.jdeDate = wka[ 0 ];
+        pargs.jdeTime = wka[ 1 ];
       }
-      log.v( 'Last PDF In Process Queue : ' + row );
+      log.v( 'Current AIX (JDE) System Date and Time : ' + row );
       dbc.release( function( err ) {
         if ( err ) {
           log.e( ' Unable to release Jde Db connection : ' + err );
