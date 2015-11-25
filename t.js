@@ -31,15 +31,19 @@ function check( cbDone ) {
     function( next ) { checkGetNewPdf( parg, next )  }
   ], function( err, res ) {
 
+    checkEnd = moment();
     if ( err ) {
 
-      log.e( 'Hit error during Check : ' + err );
+      log.e( 'Unexpected error during check - Took : ' + moment.duration( checkEnd - checkStart ) );
+      log.e( 'Unexpected error during check : ' + err );
       setTimeout( cbDone, pollInterval );
       
     } else {
 
-      checkEnd = moment();
-      log.v( 'Check Complete - No errors - Took : ' + moment.duration( checkEnd - checkStart ) );
+      log.i( 'Check Complete : Added ' + parg.pdfAddCount + ' new PDF entries to Queue : Took : ' + moment.duration( checkEnd - checkStart) );  
+      if ( parg.pdfAddErrorCount > 0 ) {
+        log.i( 'Check Complete : Failed to Add ' + parg.pdfAddErrorCount + ' PDF entries to Queue - already added?' );  
+      }
       setTimeout( cbDone, pollInterval );
 
     }
@@ -119,6 +123,9 @@ function checkSetMonitorFrom( parg, next ) {
 
 function checkGetNewPdf( parg, next ) {
 
+  parg.pdfAddCount = 0;
+  parg.pdfAddErrorCount = 0;
+
   getnewpdf.getNewPdf( parg, function( err, result ) {
 
     if ( err ) {
@@ -156,12 +163,14 @@ function checkGetNewPdf( parg, next ) {
 
                 if ( err ) {
 
+                  parg.pdfAddErrorCount += 1;
                   log.e( row[ 0 ] + ' : Failed to Add to Jde Process Queue : ' + err );
                   return cb( null);            
 
                 } else {
 
-                  log.i( row[ 0 ] + ' : Added to Jde Process Queue ' );
+                  parg.pdfAddCount += 1;
+                  log.i( row[ 0 ] + ' : New PDF Added to Jde Process Queue ' );
                   return cb( null );
                 }      
               });
