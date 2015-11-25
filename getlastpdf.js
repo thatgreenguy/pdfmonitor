@@ -50,7 +50,7 @@ module.exports.getLastPdf = function(  pargs, cbWhenDone ) {
         pargs.monitorFromDate = wka[ 0 ];
         pargs.monitorFromTime = wka[ 1 ];
       }
-      log.v( 'Last PDF In Process Queue : ' + row );
+      log.d( 'Last PDF In Process Queue : ' + row );
       dbc.release( function( err ) {
         if ( err ) {
           log.e( ' Unable to release Jde Db connection : ' + err );
