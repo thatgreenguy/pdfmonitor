@@ -86,7 +86,7 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
   // repeatedly monitoring (normal running mode) and we cross the midnight threshold and experience a Date change
 
   // Check the passed Monitor From Date to see if it is TODAY or not - use AIX Time not CENTOS
-  currentMomentAix = moment().subtract( timeOffset); 
+  currentMomentAix = moment().subtract( timeOffset ); 
   jdeTodayAix = audit.getJdeJulianDateFromMoment( currentMomentAix );
 
   log.d( 'Check Date is : ' + monitorFromDate + ' Current (AIX) JDE Date is ' + jdeTodayAix );

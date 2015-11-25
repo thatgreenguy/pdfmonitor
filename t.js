@@ -1,11 +1,15 @@
 var async = require( 'async' ),
+  moment = require( 'moment' ),
   log = require( './common/logger.js' ),
+  audit = require( './common/audit.js' ),
   getlastpdf = require( './getlastpdf.js' ),
   getnewpdf = require( './getnewpdf.js' ),
   addnewpdf = require( './addnewpdf.js' ),
   pdfinqueue = require( './pdfinqueue.js' ),
   getjdedatetime = require( './getjdedatetime.js' ),
-  pollInterval = process.env.POLLINTERVAL;
+  pollInterval = process.env.POLLINTERVAL,
+  monitorTimeOffset = 60;
+
 
 // Continuously monitor JDE Job Control table for new Pdf entries and add them to post pdf process queue if required 
 async.forever( check, error );
@@ -13,8 +17,11 @@ async.forever( check, error );
 
 function check( cbDone ) {
 
-  var parg = {};
+  var parg = {},
+    checkStart,
+    checkEnd;
 
+  checkStart = moment();
   log.d( ' Perform Check ( every ' + pollInterval + ' milliseconds )' );
 
   async.series([
@@ -31,7 +38,8 @@ function check( cbDone ) {
       
     } else {
 
-      log.v( 'Check ran without error : ' );
+      checkEnd = moment();
+      log.v( 'Check Complete - No errors - Took : ' + moment.duration( checkEnd - checkStart ) );
       setTimeout( cbDone, pollInterval );
 
     }
@@ -42,7 +50,7 @@ function check( cbDone ) {
 
 function error( cbDone ) {
 
-  log.e( ' Error returned ' + err );
+  log.e( ' Unexpected Error : ' + err );
   setImmediate( cbDone );
 
 }
@@ -81,6 +89,8 @@ function checkGetJdeDateTime( parg, next ) {
 
 function checkSetMonitorFrom( parg, next ) {
 
+  var jdeMoment;
+
   // Monitoring of the JDE job Control table is done from a particular Date and Time.
   // Usually the last PDF added to the process queue (F559811) determines this date and time
   // Idea is that as each new PDF is added to the process queue then the monitor query checks from that point forwards (keeps the query light)
@@ -92,12 +102,16 @@ function checkSetMonitorFrom( parg, next ) {
     log.i( 'Last PDF check did not manage to set Monitor From Date and Time - F559811 file empty/cleared?' );
     log.i( 'As fallback - start monitoring from current AIX (JDE System) Date and Time - until next PDF added to F559811 Process Queue' );
 
-    parg.monitorFromDate = parg.jdeDate;
-    parg.monitorFromTime = parg.jdeTime;
+    // Save AIX (JDE) Current System Date and Time in human readable format then convert monitor from date/time to JDE format
+    // Factor in a safety offset window of 60 seconds as sometimes monitoring query runs just before trigger data is copied from F986110 to F556110
+    parg.aixDateTime = parg.jdeDate + ' ' + parg.jdeTime;
+    jdeMoment = moment( parg.aixDateTime ).subtract( monitorTimeOffset, 'seconds' );
+    parg.monitorFromDate = audit.getJdeJulianDateFromMoment( jdeMoment );
+    parg.monitorFromTime = jdeMoment.format( 'HHmmss' );
 
   }
 
-  log.v( 'Monitor for new PDF entries from : ' + parg.monitorFromDate + ' ' + parg.monitorFromTime );
+  log.v( 'Monitor for new PDF entries from : ' + parg.aixDateTime + ' JDE style : ' + parg.monitorFromDate + ' ' + parg.monitorFromTime );
   return next( null );
 
 }    
