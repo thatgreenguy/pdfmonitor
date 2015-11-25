@@ -109,7 +109,7 @@ function checkGetJdeDateTime( parg, next ) {
       return next( err );
     }
 
-    log.v( 'Current JDE System Date/Time : ' + result );
+    log.v( 'JDE (Aix) current System Date/Time : ' + result );
     return next( null );
 
   });
@@ -140,7 +140,7 @@ function checkSetMonitorFrom( parg, next ) {
 
   }
 
-  log.v( 'Monitor for new PDF entries from : ' + parg.aixDateTime + ' JDE style : ' + parg.monitorFromDate + ' ' + parg.monitorFromTime );
+  log.v( 'Monitor for new PDF entries from : ' + parg.monitorFromDate + ' ' + parg.monitorFromTime );
   return next( null );
 
 }    
