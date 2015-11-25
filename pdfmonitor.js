@@ -65,9 +65,9 @@ function check( cbDone ) {
       
     } else {
 
-      log.i( 'Check Complete : Added ' + parg.pdfAddCount + ' new PDF entries to Queue : Took : ' + moment.duration( checkEnd - checkStart) );  
+      log.v( 'Check Complete : Added ' + parg.pdfAddCount + ' new PDF entries to Queue : Took : ' + moment.duration( checkEnd - checkStart) );  
       if ( parg.pdfAddErrorCount > 0 ) {
-        log.i( 'Check Complete : Failed to Add ' + parg.pdfAddErrorCount + ' PDF entries to Queue - already added?' );  
+        log.v( 'Check Complete : Failed to Add ' + parg.pdfAddErrorCount + ' PDF entries to Queue - already added?' );  
       }
       setTimeout( cbDone, pollInterval );
 
