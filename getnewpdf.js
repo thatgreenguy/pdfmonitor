@@ -18,7 +18,7 @@ module.exports.getNewPdf = function(  pargs, cbWhenDone ) {
     options = {},
     row;
 
-  log.v( 'Get Connection to query for any new PDF entries since last PDF Job added to Queue' );
+  log.d( 'Get Connection to query for any new PDF entries since last PDF Job added to Queue' );
 
   oracledb.getConnection( credentials, function( err, dbc ) {
 
@@ -42,7 +42,7 @@ module.exports.getNewPdf = function(  pargs, cbWhenDone ) {
       }  
 
       pargs.newPdfRows = result.rows;
-      log.v( 'Read following rows from Jde Job Control : ' + result );
+      log.d( 'Read following rows from Jde Job Control : ' + result );
       dbc.release( function( err ) {
         if ( err ) {
           log.e( ' Unable to release Jde Db connection : ' + err );

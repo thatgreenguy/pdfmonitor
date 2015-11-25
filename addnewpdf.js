@@ -19,7 +19,7 @@ module.exports.addNewPdf = function( pargs, cbWhenDone ) {
 
   
   newPdf = pargs.newPdfRow[ 0 ];
-  log.v( newPdf + ' : Get Connection for Insert' );
+  log.d( newPdf + ' : Get Connection for Insert' );
 
   oracledb.getConnection( credentials, function( err, dbc ) {
 

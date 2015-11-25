@@ -17,7 +17,7 @@ module.exports.getJdeDateTime = function(  pargs, cbWhenDone ) {
     systemdate,
     wka;
 
-  log.v( 'Get Connection to query oracle DB for Aix (JDE) Current Date and Time' );
+  log.d( 'Get Connection to query oracle DB for Aix (JDE) Current Date and Time' );
 
   oracledb.getConnection( credentials, function( err, dbc ) {
 
@@ -49,7 +49,7 @@ module.exports.getJdeDateTime = function(  pargs, cbWhenDone ) {
         pargs.jdeDate = wka[ 0 ];
         pargs.jdeTime = wka[ 1 ];
       }
-      log.v( 'Current AIX (JDE) System Date and Time : ' + row );
+      log.d( 'Current AIX (JDE) System Date and Time : ' + row );
       dbc.release( function( err ) {
         if ( err ) {
           log.e( ' Unable to release Jde Db connection : ' + err );

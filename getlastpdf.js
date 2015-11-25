@@ -20,7 +20,7 @@ module.exports.getLastPdf = function(  pargs, cbWhenDone ) {
   pargs.monitorFromDate = 0;
   pargs.monitorFromTime = 0;
 
-  log.v( 'Get Connection to find Last PDF Job added to Queue' );
+  log.d( 'Get Connection to find Last PDF Job added to Queue' );
 
   oracledb.getConnection( credentials, function( err, dbc ) {
 

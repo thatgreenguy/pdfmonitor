@@ -8,7 +8,11 @@ var async = require( 'async' ),
   pdfinqueue = require( './pdfinqueue.js' ),
   getjdedatetime = require( './getjdedatetime.js' ),
   pollInterval = process.env.POLLINTERVAL,
+  jdeEnv = process.env.JDE_ENV,
+  jdeEnvDb = process.env.JDE_ENV_DB,
+  jdeEnvDbF556110 = process.env.JDE_ENV_DB_F556110,
   monitorTimeOffset = 60;
+
 
 
 // Synopsis
@@ -212,13 +216,15 @@ function initialisation() {
   log.i( '' );
   log.i( '----- DLINK JDE PDF Queue Monitoring starting - Monitor' ); 
   log.i( '' );
-  log.i( '----- JDE Environment : ' + jdeEnv ); 
-  log.i( '----- JDE Database    : ' + jdeEnvDb ); 
+  log.i( '----- JDE Environment    : ' + jdeEnv ); 
+  log.i( '----- JDE Database       : ' + jdeEnvDb ); 
+  log.i( '----- JDE Job Control DB : ' + jdeEnvDbF556110 ); 
   log.i( '' );
   log.i( '----- Polling Interval   : ' + pollInterval ); 
   log.i( '' );
   log.i( '----- Monitor for new PDF files appearing in JDE PrintQueue - and if configured' );
-  log.i( '----- for any post Pdf processing (Logo, Mail) add entry to F559811 JDE PDF Process Queue' ); 
+  log.i( '----- for any post Pdf processing (Logo, Mail) add new entry to the F559811 JDE PDF Process Queue' ); 
   log.i( '' );
 
-}
+}  
+

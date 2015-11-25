@@ -18,7 +18,7 @@ module.exports.pdfInQueue = function(  pargs, cbWhenDone ) {
     options = {},
     row;
 
-  log.v( 'Get Connection to query whether PDF already added to JDE Process Queue or not' );
+  log.d( 'Get Connection to query whether PDF already added to JDE Process Queue or not' );
 
   oracledb.getConnection( credentials, function( err, dbc ) {
 
@@ -42,7 +42,7 @@ module.exports.pdfInQueue = function(  pargs, cbWhenDone ) {
       }  
 
       pargs.pdfInQueue = result.rows[ 0 ];
-      log.v( 'pdfInQueue Check shows : ' + pargs.pdfInQueue );
+      log.d( 'pdfInQueue Check shows : ' + pargs.pdfInQueue );
       dbc.release( function( err ) {
         if ( err ) {
           log.e( ' Unable to release Jde Db connection : ' + err );
