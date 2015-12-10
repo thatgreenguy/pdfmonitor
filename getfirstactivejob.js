@@ -15,7 +15,8 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
     options = {},
     row,
     blkk,
-    wka;
+    wka,
+    jdeEnvCheck;
 
   pargs.workingDate = 0;
   pargs.workingTime = 0;
@@ -29,7 +30,22 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
       return cbWhenDone( err );
     }  
 
-    sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') ORDER BY jcsbmdate, jcsbmtime ";
+    // Process expects a JDE environment to be specified via environment variables so post PDF processing can be 
+    // isolated for each JDE environment DV, PY, UAT and PROD
+    // therefore environment check needs to be part of query restrictions so construct that here
+    if ( jdeEnv === 'DV812' ) {
+      jdeEnvCheck = " AND (( jcenhv = 'DV812') OR (jcenhv = 'JDV812')) "; 
+    } else {
+      if ( jdeEnv === 'PY812' ) {
+        jdeEnvCheck = " AND (( jcenhv = 'PY812') OR (jcenhv = 'JPY812') OR (jcenhv = 'UAT812') OR (jcenhv = 'JUAT812')) "; 
+      } else {
+        if ( jdeEnv === 'PD812' ) {
+          jdeEnvCheck = " AND (( jcenhv = 'PD812') OR ( jcenhv = 'JPD812')) ";      
+        }
+      }
+    }
+
+    sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') " + jdeEnvCheck + " ORDER BY jcsbmdate, jcsbmtime ";
     dbc.execute( sql, binds, options, function( err, result ) {
 
       if ( err ) {
@@ -66,3 +82,7 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
   });
 
 }
+
+
+
+

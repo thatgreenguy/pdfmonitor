@@ -25,6 +25,7 @@ module.exports.setMonitorFromDateTime = function( pargs, cbWhenDone ) {
 
   async.series([
     function( next ) { checkEarliestActiveJob( pargs, next ) },
+    function( next ) { determineEarliestDateTime( pargs, next ) },
     function( next ) { checkLatestQueueEntry( pargs, next ) },
     function( next ) { determineEarliestDateTime( pargs, next ) },
     function( next ) { checkCurrentAixDateTime( pargs, next ) },
@@ -37,7 +38,7 @@ module.exports.setMonitorFromDateTime = function( pargs, cbWhenDone ) {
 
     } else {
 
-      if ( pargs.monitorFromDate === 0 ) {
+      if ( pargs.monitorFromDate == 0 ) {
 
         // Unable to determine a starting Date and Time for job Control Query check
         // report error and return with error - maybe network or DB down temporarily?
@@ -47,6 +48,7 @@ module.exports.setMonitorFromDateTime = function( pargs, cbWhenDone ) {
       } else {
 
         log.i( 'Monitor from Date: ' + pargs.monitorFromDate + ' and Time: ' + pargs.monitorFromTime );
+        log.i( ' ' );
         return cbWhenDone( null );
 
       }
@@ -65,11 +67,6 @@ function checkEarliestActiveJob( pargs, next ) {
       return next( err );
 
     } else {
-
-      log.d( 'Got result from Active jobs : ' + res);
-
-      pargs.monitorFromDate = pargs.workingDate;
-      pargs.monitorFromTime = pargs.workingTime;
 
       return next ( null );
 
@@ -90,8 +87,6 @@ function checkLatestQueueEntry( pargs, next ) {
 
     } else {
 
-      log.v( 'Got result from latest queue entry : ' + res );
-
       return next ( null );
 
     } 
@@ -111,8 +106,6 @@ function checkCurrentAixDateTime( pargs, next ) {
 
     } else {
 
-      log.v( 'Got result from AIX (JDE) Date/Time : ' + res );
-
       return next ( null );
 
     } 
@@ -124,26 +117,40 @@ function checkCurrentAixDateTime( pargs, next ) {
 // 
 function determineEarliestDateTime( pargs, next ) {
 
-  // If working Date is set to seomthing then do comparison and swap values if required
-  if ( pargs.workingDate != 0 ) {
+  log.d( 'IN: Monitor From Date and Time: ' + pargs.monitorFromDate + ' ' + pargs.monitorFromTime );
+  log.d( 'IN: Working Date and Time: ' + pargs.workingDate + ' ' + pargs.workingTime );
 
-    // If latest working date/time is earlier than current monitor From Date/Time then use earlier date/time values
-    if ( pargs.workingDate < pargs.monitorFromDate ) {
+  // If monitor From Date and Time not yet set then set them to current working values
+  if ( pargs.monitorFromDate == 0 ) {
 
-      pargs.monitorFromDate = pargs.workingDate;
-      pargs.monitorFromTime = pargs.workingTime;
+    pargs.monitorFromDate = pargs.workingDate;
+    pargs.monitorFromTime = pargs.workingTime;  
 
-    } else {
+  } else {
 
-      // If Dates are same but latets working Time is earlier than current monitor From Time then use earlier values
-      if ( pargs.workingDate == pargs.monitorFromDate && pargs.workingTime < pargs.monitorFromTime ) {
+    // If working Date is set to seomthing then do comparison and swap values if required
+    if ( pargs.workingDate != 0 ) {
+
+      // If latest working date/time is earlier than current monitor From Date/Time then use earlier date/time values
+      if ( pargs.workingDate < pargs.monitorFromDate ) {
 
         pargs.monitorFromDate = pargs.workingDate;
         pargs.monitorFromTime = pargs.workingTime;
 
+      } else {
+
+        // If Dates are same but latets working Time is earlier than current monitor From Time then use earlier values
+        if ( pargs.workingDate == pargs.monitorFromDate && pargs.workingTime < pargs.monitorFromTime ) {
+
+          pargs.monitorFromDate = pargs.workingDate;
+          pargs.monitorFromTime = pargs.workingTime;
+
+        }
       }
     }
   }
+
+  log.d( 'OUT: Monitor From Date and Time: ' + pargs.monitorFromDate + ' ' + pargs.monitorFromTime );
 
   return next( null );
 

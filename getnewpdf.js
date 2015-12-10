@@ -6,8 +6,7 @@ var async = require( 'async' ),
   jdeEnv = process.env.JDE_ENV,
   jdeEnvDb = process.env.JDE_ENV_DB,
   jdeEnvDbF556110 = process.env.JDE_ENV_DB_F556110,
-  credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME },
-  timeOffset = 0;
+  credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME };
   
 
 module.exports.getNewPdf = function(  pargs, cbWhenDone ) {
@@ -27,7 +26,7 @@ module.exports.getNewPdf = function(  pargs, cbWhenDone ) {
       return cbWhenDone( err );
     }  
 
-    sql = constructQuery( pargs.monitorFromDate, pargs.monitorFromTime, timeOffset );
+    sql = constructQuery( pargs.monitorFromDate, pargs.monitorFromTime );
     dbc.execute( sql, binds, options, function( err, result ) {
 
       if ( err ) {
@@ -59,7 +58,7 @@ module.exports.getNewPdf = function(  pargs, cbWhenDone ) {
 
 // Construct query which is suitable for monitor from date and time and considering
 // change of day on both startup and crossing midnight boundary
-function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
+function constructQuery( monitorFromDate, monitorFromTime ) {
 
   var query = null,
       currentMomentAix,
@@ -86,7 +85,7 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
   // repeatedly monitoring (normal running mode) and we cross the midnight threshold and experience a Date change
 
   // Check the passed Monitor From Date to see if it is TODAY or not - use AIX Time not CENTOS
-  currentMomentAix = moment().subtract( timeOffset ); 
+  currentMomentAix = moment(); 
   jdeTodayAix = audit.getJdeJulianDateFromMoment( currentMomentAix );
 
   log.d( 'Check Date is : ' + monitorFromDate + ' Current (AIX) JDE Date is ' + jdeTodayAix );
@@ -96,11 +95,11 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
     // On startup where startup is Today or whilst monitoring and no Date change yet
     // simply look for Job Control entries greater than or equal to monitorFromDate and monitorFromTime
      
-    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND jcactdate = " + monitorFromDate + ' AND jcacttime >= ' + monitorFromTime;
-    query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
-    query += " ( SELECT RTRIM(crpgm, ' ') FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid = 'PDFMAIL' OR crcfgsid = 'PDFLOGO' )";
+    query += " AND jcpswd in ( SELECT DISTINCT crpgm FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid = 'PDFMAIL' OR crcfgsid = 'PDFLOGO' )";
+    query += " AND jcfndfuf2 NOT in ( SELECT jpfndfuf2 FROM " + jdeEnvDb.trim() + ".F559811 ) ";
     query += " ORDER BY jcactdate, jcacttime";  
 
   } else {
@@ -108,14 +107,14 @@ function constructQuery( monitorFromDate, monitorFromTime, timeOffset ) {
     // Otherwise Startup was before Today or we have crossed Midnight into a new day so query needs to adjust
     // and check for records on both sides of the date change
 
-    query = "SELECT jcfndfuf2, jcactdate, jcacttime, jcprocessid FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
+    query = "SELECT jcfndfuf2, jcactdate, jcacttime FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND (( jcactdate = " + monitorFromDate + " AND jcacttime >= " + monitorFromTime + ") ";
     query += " OR ( jcactdate > " + monitorFromDate + " )) ";
-    query += " AND RTRIM( SUBSTR( jcfndfuf2, 0, ( INSTR( jcfndfuf2, '_') - 1 )), ' ' ) in ";
-    query += " ( SELECT RTRIM(crpgm, ' ') FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid = 'PDFMAIL' OR crcfgsid = 'PDFLOGO' ) ";
+    query += " AND jcpswd in ( SELECT DISTINCT crpgm FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid = 'PDFMAIL' OR crcfgsid = 'PDFLOGO' ) ";
+    query += " AND jcfndfuf2 NOT in ( SELECT jpfndfuf2 FROM " + jdeEnvDb.trim() + ".F559811 ) ";
     query += " ORDER BY jcactdate, jcacttime";
-  
+
   }
 
   log.d( query );

@@ -6,12 +6,12 @@ var async = require( 'async' ),
   getnewpdf = require( './getnewpdf.js' ),
   addnewpdf = require( './addnewpdf.js' ),
   pdfinqueue = require( './pdfinqueue.js' ),
+  setmonitorfromdatetime = require( './setmonitorfromdatetime.js' ),
   getjdedatetime = require( './getjdedatetime.js' ),
   pollInterval = process.env.POLLINTERVAL,
   jdeEnv = process.env.JDE_ENV,
   jdeEnvDb = process.env.JDE_ENV_DB,
-  jdeEnvDbF556110 = process.env.JDE_ENV_DB_F556110,
-  monitorTimeOffset = 60;
+  jdeEnvDbF556110 = process.env.JDE_ENV_DB_F556110;
 
 
 
@@ -50,9 +50,7 @@ function check( cbDone ) {
   log.d( ' Perform Check ( every ' + pollInterval + ' milliseconds )' );
 
   async.series([
-    function( next ) { checkGetLastPdf( parg, next )  },
-    function( next ) { checkGetJdeDateTime( parg, next )  },
-    function( next ) { checkSetMonitorFrom( parg, next )  },
+    function( next ) { checkSetMonitorFromDateTime( parg, next )  },
     function( next ) { checkGetNewPdf( parg, next )  }
   ], function( err, res ) {
 
@@ -83,6 +81,21 @@ function error( cbDone ) {
   setImmediate( cbDone );
 
 }
+
+
+function checkSetMonitorFromDateTime( parg, next ) {
+
+  setmonitorfromdatetime.setMonitorFromDateTime( parg, function( err, result ) {
+
+    if ( err ) {
+      return next( err );
+    }
+
+    log.v( 'Monitor Job Control from : ' + parg.monitorFromDate + ' ' + parg.monitorFromTime );
+    return next( null );
+
+  });
+}    
 
 
 function checkGetLastPdf( parg, next ) {
