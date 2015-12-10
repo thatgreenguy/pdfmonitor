@@ -1,10 +1,10 @@
-var testme = require( './getmonitorfrom.js' ),
+var testme = require( './setmonitorfromdatetime.js' ),
   log = require( './common/logger.js' );
 
 var p= {};
 
 
-testme.getMonitorFrom( p, function( err, res ) {
+testme.setMonitorFromDateTime( p, function( err, res ) {
 
   if ( err ) {
 

@@ -17,6 +17,9 @@ module.exports.getLatestQueueEntry = function(  pargs, cbWhenDone ) {
     blkk,
     wka;
 
+  pargs.workingDate = 0;
+  pargs.workingTime = 0;
+
   log.d( 'Get Connection to find Last PDF Job added to Queue' );
 
   oracledb.getConnection( credentials, function( err, dbc ) {
@@ -44,8 +47,8 @@ module.exports.getLatestQueueEntry = function(  pargs, cbWhenDone ) {
       if ( typeof row !== 'undefined' ) {
         blkk = row[ 1 ];
         wka = blkk.split(' ');
-        pargs.monitorFromDate = wka[ 0 ];
-        pargs.monitorFromTime = wka[ 1 ];
+        pargs.workingDate = wka[ 0 ];
+        pargs.workingTime = wka[ 1 ];
       }
       log.d( 'Last PDF In Process Queue : ' + row );
       dbc.release( function( err ) {

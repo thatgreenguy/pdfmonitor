@@ -7,20 +7,20 @@ var async = require( 'async' ),
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME };
   
 
-module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
+module.exports.getCurrentAixDateTime = function(  pargs, cbWhenDone ) {
 
   var p = {},
     sql,
     binds = [],
     options = {},
     row,
-    blkk,
+    systemdate,
     wka;
 
   pargs.workingDate = 0;
   pargs.workingTime = 0;
 
-  log.d( 'Get Connection to find First Current PDF Job Running, Queued or Waiting' );
+  log.d( 'Get Connection to query oracle DB for Aix (JDE) Current Date and Time' );
 
   oracledb.getConnection( credentials, function( err, dbc ) {
 
@@ -29,7 +29,9 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
       return cbWhenDone( err );
     }  
 
-    sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') ORDER BY jcsbmdate, jcsbmtime ";
+    sql = 'SELECT TO_CHAR(SYSDATE, ';
+    sql += "'" + 'YYYY-MM-DD HH24:MI:SS' + "'" + ') "NOW" FROM DUAL ';
+
     dbc.execute( sql, binds, options, function( err, result ) {
 
       if ( err ) {
@@ -44,17 +46,13 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
       }  
 
       row = result.rows[ 0 ];
-      if ( typeof row !== 'undefined' ) {
-
-        pargs.workingDate = row[ 1 ];
-        pargs.workingTime = row[ 2 ];
-        log.v( 'Active or Queued Jobs Detected - First of which is : ' + row );
-
-      } else {
-
-        log.d( 'No Active or Queued Jobs detected.' );
-
+      systemdate = row[ 0 ];
+      if ( typeof systemdate !== 'undefined' ) {
+        wka = systemdate.split(' ');
+        pargs.workingDate = wka[ 0 ];
+        pargs.workingTime = wka[ 1 ];
       }
+      log.d( 'Current AIX (JDE) System Date and Time : ' + row );
       dbc.release( function( err ) {
         if ( err ) {
           log.e( ' Unable to release Jde Db connection : ' + err );
