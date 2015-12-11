@@ -49,15 +49,19 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
     }
 
     // Exclude any JDE subsystem jobs from Active Job check as they can run for days or weeks at a time
-    excludedJobList = excludeSubsystemJobs.split( " " );
-    excludedJobSql = '';
-    for ( var i = 0; i < excludedJobList.length; i++ ) {
-      if ( excludedJobList[ i ].trim() !== '' ) {
-        excludedJobSql += " AND jcfndfuf2 not like '" + excludedJobList[ i ].trim() + "%' ";
+    if ( typeof excludeSubsystemJobs !== 'undefined' ) {
+      excludedJobList = excludeSubsystemJobs.split( " " );
+      excludedJobSql = '';
+      for ( var i = 0; i < excludedJobList.length; i++ ) {
+        if ( excludedJobList[ i ].trim() !== '' ) {
+          excludedJobSql += " AND jcfndfuf2 not like '" + excludedJobList[ i ].trim() + "%' ";
+        }
       }
+      sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') " + jdeEnvCheck + excludedJobSql + " ORDER BY jcsbmdate, jcsbmtime ";
+    } else {
+      sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') " + jdeEnvCheck + " ORDER BY jcsbmdate, jcsbmtime ";
     }
 
-    sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') " + jdeEnvCheck + excludedJobSql + " ORDER BY jcsbmdate, jcsbmtime ";
     log.d( sql );
 
     dbc.execute( sql, binds, options, function( err, result ) {
