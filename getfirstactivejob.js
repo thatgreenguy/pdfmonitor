@@ -63,7 +63,7 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
       if ( typeof row !== 'undefined' ) {
 
         pargs.workingDate = row[ 1 ];
-        pargs.workingTime = row[ 2 ];
+        pargs.workingTime = parseInt( row[ 2 ] );
         log.v( 'Active or Queued Jobs Detected - First of which is : ' + row );
 
       } else {

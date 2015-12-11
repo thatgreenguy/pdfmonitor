@@ -63,7 +63,7 @@ module.exports.getCurrentAixDateTime = function(  pargs, cbWhenDone ) {
         pargs.aixDateTime = wka[ 0 ] + ' ' + wka[ 1 ];
         jdeMoment = moment( pargs.aixDateTime ).subtract( monitorTimeOffset, 'seconds' );
         pargs.workingDate = audit.getJdeJulianDateFromMoment( jdeMoment );
-        pargs.workingTime = jdeMoment.format( 'HHmmss' );
+        pargs.workingTime = parseInt( jdeMoment.format( 'HHmmss' ) );
 
       }
       log.d( 'Current AIX (JDE) System Date and Time : ' + row );

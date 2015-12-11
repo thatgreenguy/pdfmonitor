@@ -117,8 +117,7 @@ function checkCurrentAixDateTime( pargs, next ) {
 // 
 function determineEarliestDateTime( pargs, next ) {
 
-  log.d( 'IN: Monitor From Date and Time: ' + pargs.monitorFromDate + ' ' + pargs.monitorFromTime );
-  log.d( 'IN: Working Date and Time: ' + pargs.workingDate + ' ' + pargs.workingTime );
+  log.v( 'IN: Monitor From Date and Time: ' + pargs.monitorFromDate + ' ' + pargs.monitorFromTime + ' Working Date and Time: ' + pargs.workingDate + ' ' + pargs.workingTime );
 
   // If monitor From Date and Time not yet set then set them to current working values
   if ( pargs.monitorFromDate == 0 ) {
@@ -150,7 +149,7 @@ function determineEarliestDateTime( pargs, next ) {
     }
   }
 
-  log.d( 'OUT: Monitor From Date and Time: ' + pargs.monitorFromDate + ' ' + pargs.monitorFromTime );
+  log.v( 'OUT: Monitor From Date and Time: ' + pargs.monitorFromDate + ' ' + pargs.monitorFromTime );
 
   return next( null );
 

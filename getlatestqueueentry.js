@@ -48,7 +48,7 @@ module.exports.getLatestQueueEntry = function(  pargs, cbWhenDone ) {
         blkk = row[ 1 ];
         wka = blkk.split(' ');
         pargs.workingDate = wka[ 0 ];
-        pargs.workingTime = wka[ 1 ];
+        pargs.workingTime = parseInt( wka[ 1 ] );
       }
       log.d( 'Last PDF In Process Queue : ' + row );
       dbc.release( function( err ) {
