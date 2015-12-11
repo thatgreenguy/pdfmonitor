@@ -19,7 +19,7 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
     wka,
     jdeEnvCheck,
     excludedJobList,
-    excludeJobSql;
+    excludedJobSql;
 
   pargs.workingDate = 0;
   pargs.workingTime = 0;
@@ -50,11 +50,16 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
 
     // Exclude any JDE subsystem jobs from Active Job check as they can run for days or weeks at a time
     excludedJobList = excludeSubsystemJobs.split( " " );
-    for ( var i = 0; i < excludedJobs.length; i++ ) {
-      excludedJobSql += " AND jcfndfuf2 not like '" + excludedJobs[ i ].trim() + "%' ";
+    excludedJobSql = '';
+    for ( var i = 0; i < excludedJobList.length; i++ ) {
+      if ( excludedJobList[ i ].trim() !== '' ) {
+        excludedJobSql += " AND jcfndfuf2 not like '" + excludedJobList[ i ].trim() + "%' ";
+      }
     }
 
-    sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') " + jdeEnvCheck + excludedjobs + " ORDER BY jcsbmdate, jcsbmtime ";
+    sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') " + jdeEnvCheck + excludedJobSql + " ORDER BY jcsbmdate, jcsbmtime ";
+    log.d( sql );
+
     dbc.execute( sql, binds, options, function( err, result ) {
 
       if ( err ) {
