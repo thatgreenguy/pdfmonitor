@@ -4,6 +4,7 @@ var async = require( 'async' ),
   jdeEnv = process.env.JDE_ENV,
   jdeEnvDb = process.env.JDE_ENV_DB,
   jdeEnvDbF556110 = process.env.JDE_ENV_DB_F556110,
+  excludeSubsystemJobs = process.env.EXCLUDESUBSYSTEMJOBS,
   credentials = { user: process.env.DB_USER, password: process.env.DB_PWD, connectString: process.env.DB_NAME };
   
 
@@ -16,7 +17,9 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
     row,
     blkk,
     wka,
-    jdeEnvCheck;
+    jdeEnvCheck,
+    excludedJobList,
+    excludeJobSql;
 
   pargs.workingDate = 0;
   pargs.workingTime = 0;
@@ -34,18 +37,24 @@ module.exports.getFirstActiveJob = function(  pargs, cbWhenDone ) {
     // isolated for each JDE environment DV, PY, UAT and PROD
     // therefore environment check needs to be part of query restrictions so construct that here
     if ( jdeEnv === 'DV812' ) {
-      jdeEnvCheck = " AND (( jcenhv = 'DV812') OR (jcenhv = 'JDV812')) "; 
+      jdeEnvCheck = " AND jcenhv IN ('DV812', 'JDV812') "; 
     } else {
       if ( jdeEnv === 'PY812' ) {
-        jdeEnvCheck = " AND (( jcenhv = 'PY812') OR (jcenhv = 'JPY812') OR (jcenhv = 'UAT812') OR (jcenhv = 'JUAT812')) "; 
+        jdeEnvCheck = " AND jcenhv IN ('PY812', 'JPY812', 'UAT812', 'JUAT812') "; 
       } else {
         if ( jdeEnv === 'PD812' ) {
-          jdeEnvCheck = " AND (( jcenhv = 'PD812') OR ( jcenhv = 'JPD812')) ";      
+          jdeEnvCheck = " AND jcenhv IN ('PD812', 'JPD812') ";      
         }
       }
     }
 
-    sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') " + jdeEnvCheck + " ORDER BY jcsbmdate, jcsbmtime ";
+    // Exclude any JDE subsystem jobs from Active Job check as they can run for days or weeks at a time
+    excludedJobList = excludeSubsystemJobs.split( " " );
+    for ( var i = 0; i < excludedJobs.length; i++ ) {
+      excludedJobSql += " AND jcfndfuf2 not like '" + excludedJobs[ i ].trim() + "%' ";
+    }
+
+    sql = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 WHERE jcjobsts in ('P', 'S', 'W') " + jdeEnvCheck + excludedjobs + " ORDER BY jcsbmdate, jcsbmtime ";
     dbc.execute( sql, binds, options, function( err, result ) {
 
       if ( err ) {
