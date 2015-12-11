@@ -69,13 +69,13 @@ function constructQuery( monitorFromDate, monitorFromTime ) {
   // isolated for each JDE environment DV, PY, UAT and PROD
   // therefore environment check needs to be part of query restrictions so construct that here
   if ( jdeEnv === 'DV812' ) {
-    jdeEnvCheck = " AND (( jcenhv = 'DV812') OR (jcenhv = 'JDV812')) "; 
+    jdeEnvCheck = " AND jcenhv IN ('DV812', 'JDV812') "; 
   } else {
     if ( jdeEnv === 'PY812' ) {
-      jdeEnvCheck = " AND (( jcenhv = 'PY812') OR (jcenhv = 'JPY812') OR (jcenhv = 'UAT812') OR (jcenhv = 'JUAT812')) "; 
+      jdeEnvCheck = " AND jcenhv IN ('PY812', 'JPY812', 'UAT812', 'JUAT812') "; 
     } else {
       if ( jdeEnv === 'PD812' ) {
-        jdeEnvCheck = " AND (( jcenhv = 'PD812') OR ( jcenhv = 'JPD812')) ";      
+        jdeEnvCheck = " AND jcenhv IN ('PD812', 'JPD812') ";      
       }
     }
   }
@@ -98,8 +98,8 @@ function constructQuery( monitorFromDate, monitorFromTime ) {
     query = "SELECT jcfndfuf2, jcactdate, jcacttime FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND jcactdate = " + monitorFromDate + ' AND jcacttime >= ' + monitorFromTime;
-    query += " AND jcpswd in ( SELECT DISTINCT crpgm FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid = 'PDFMAIL' OR crcfgsid = 'PDFLOGO' )";
-    query += " AND jcfndfuf2 NOT in ( SELECT jpfndfuf2 FROM " + jdeEnvDb.trim() + ".F559811 ) ";
+    query += " AND jcpswd in ( SELECT DISTINCT crpgm FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid in ('PDFMAIL', 'PDFLOGO') )";
+//    query += " AND jcfndfuf2 NOT in ( SELECT jpfndfuf2 FROM " + jdeEnvDb.trim() + ".F559811 ) ";
     query += " ORDER BY jcactdate, jcacttime";  
 
   } else {
@@ -111,8 +111,8 @@ function constructQuery( monitorFromDate, monitorFromTime ) {
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND (( jcactdate = " + monitorFromDate + " AND jcacttime >= " + monitorFromTime + ") ";
     query += " OR ( jcactdate > " + monitorFromDate + " )) ";
-    query += " AND jcpswd in ( SELECT DISTINCT crpgm FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid = 'PDFMAIL' OR crcfgsid = 'PDFLOGO' ) ";
-    query += " AND jcfndfuf2 NOT in ( SELECT jpfndfuf2 FROM " + jdeEnvDb.trim() + ".F559811 ) ";
+    query += " AND jcpswd in ( SELECT DISTINCT crpgm FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid in ('PDFMAIL', 'PDFLOGO') ) ";
+//    query += " AND jcfndfuf2 NOT in ( SELECT jpfndfuf2 FROM " + jdeEnvDb.trim() + ".F559811 ) ";
     query += " ORDER BY jcactdate, jcacttime";
 
   }
