@@ -95,7 +95,7 @@ function constructQuery( monitorFromDate, monitorFromTime ) {
     // On startup where startup is Today or whilst monitoring and no Date change yet
     // simply look for Job Control entries greater than or equal to monitorFromDate and monitorFromTime
      
-    query = "SELECT jcfndfuf2, jcactdate, jcacttime FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
+    query = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND jcactdate = " + monitorFromDate + ' AND jcacttime >= ' + monitorFromTime;
     query += " AND jcpswd in ( SELECT DISTINCT crpgm FROM " + jdeEnvDb.trim() + ".F559890 WHERE crcfgsid in ('PDFMAIL', 'PDFLOGO') )";
@@ -107,7 +107,7 @@ function constructQuery( monitorFromDate, monitorFromTime ) {
     // Otherwise Startup was before Today or we have crossed Midnight into a new day so query needs to adjust
     // and check for records on both sides of the date change
 
-    query = "SELECT jcfndfuf2, jcactdate, jcacttime FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
+    query = "SELECT jcfndfuf2, jcsbmdate, jcsbmtime FROM " + jdeEnvDbF556110.trim() + ".F556110 ";
     query += " WHERE jcjobsts = 'D' AND jcfuno = 'UBE' " + jdeEnvCheck;
     query += " AND (( jcactdate = " + monitorFromDate + " AND jcacttime >= " + monitorFromTime + ") ";
     query += " OR ( jcactdate > " + monitorFromDate + " )) ";
